@@ -107,12 +107,12 @@ func newServerTester(t testing.TB, handler http.HandlerFunc, opts ...interface{}
 	st.hpackEnc = hpack.NewEncoder(&st.headerBuf)
 
 	var stderrv io.Writer = ioutil.Discard
-	if *stderrVerbose {
+	if true || *stderrVerbose {
 		stderrv = os.Stderr
 	}
 
 	ts.TLS = ts.Config.TLSConfig // the httptest.Server has its own copy of this TLS config
-	ts.Config.ErrorLog = log.New(io.MultiWriter(stderrv, twriter{t: t, st: st}, logBuf), "", log.LstdFlags)
+	ts.Config.ErrorLog = log.New(stderrv, "", log.LstdFlags)
 	ts.StartTLS()
 
 	if VerboseLogs {
@@ -124,7 +124,7 @@ func newServerTester(t testing.TB, handler http.HandlerFunc, opts ...interface{}
 		st.sc = v
 		st.sc.testHookCh = make(chan func())
 	}
-	log.SetOutput(io.MultiWriter(stderrv, twriter{t: t, st: st}))
+	log.SetOutput(stderrv)
 	if !onlyServer {
 		cc, err := tls.Dial("tcp", ts.Listener.Addr().String(), tlsConfig)
 		if err != nil {
@@ -893,7 +893,7 @@ func TestServer_RejectsLargeFrames(t *testing.T) {
 	// We ignore the return value because it's expected that the server
 	// will only read the first 9 bytes (the headre) and then disconnect.
 	st.fr.WriteRawFrame(0xff, 0, 0, make([]byte, defaultMaxReadFrameSize+1))
-
+	time.Sleep(200 * time.Millisecond)
 	gf := st.wantGoAway()
 	if gf.ErrCode != ErrCodeFrameSize {
 		t.Errorf("GOAWAY err = %v; want %v", gf.ErrCode, ErrCodeFrameSize)

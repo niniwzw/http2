@@ -596,6 +596,7 @@ func (sc *serverConn) notePanic() {
 }
 
 func (sc *serverConn) serve() {
+	log.Println("server one...")
 	sc.serveG.check()
 	defer sc.notePanic()
 	defer sc.conn.Close()
@@ -641,6 +642,7 @@ func (sc *serverConn) serve() {
 				sc.readFrameCh = nil
 			}
 			if !sc.processFrameFromReader(fg, ok) {
+				//log.Println("processFrameFromReader...")
 				return
 			}
 			if settingsTimer.C != nil {
@@ -651,9 +653,11 @@ func (sc *serverConn) serve() {
 			sc.noteBodyRead(m.st, m.n)
 		case <-settingsTimer.C:
 			sc.logf("timeout waiting for SETTINGS frames from %v", sc.conn.RemoteAddr())
+			//log.Println("settingsTimer...")
 			return
 		case <-sc.shutdownTimerCh:
 			sc.vlogf("GOAWAY close timer fired; closing conn from %v", sc.conn.RemoteAddr())
+			//log.Println("shutdownTimerCh...")
 			return
 		case fn := <-sc.testHookCh:
 			fn()

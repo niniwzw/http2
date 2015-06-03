@@ -15,6 +15,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+    "bytes"
+    "fmt"
+	"log"
 )
 
 var (
@@ -22,7 +25,7 @@ var (
 	transportHost = flag.String("transporthost", "http2.golang.org", "hostname to use for TestTransport")
 	insecure      = flag.Bool("insecure", false, "insecure TLS dials")
 )
-
+var _  = log.Println
 func TestTransportExternal(t *testing.T) {
 	if !*extNet {
 		t.Skip("skipping external network test")
@@ -38,17 +41,20 @@ func TestTransportExternal(t *testing.T) {
 	res.Write(os.Stdout)
 }
 
-func TestTransport(t *testing.T) {
-	const body = "sup"
+func TestTransportGet(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, body)
-	})
+        buf := bytes.NewBufferString("")
+        io.Copy(buf, r.Body)
+		buf.WriteTo(w)
+        time.Sleep(10 * time.Second)
+	}, optOnlyServer)
 	defer st.Close()
 
-	tr := &Transport{InsecureTLSDial: true}
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-
-	req, err := http.NewRequest("GET", st.ts.URL, nil)
+    const body = "hello world"
+    reqbody := bytes.NewBufferString(body)
+	req, err := http.NewRequest("GET", st.ts.URL, reqbody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +72,7 @@ func TestTransport(t *testing.T) {
 		t.Errorf("Status = %q; want %q", g, w)
 	}
 	wantHeader := http.Header{
-		"Content-Length": []string{"3"},
+		"Content-Length": []string{fmt.Sprint(len(body))},
 		"Content-Type":   []string{"text/plain; charset=utf-8"},
 	}
 	if !reflect.DeepEqual(res.Header, wantHeader) {
@@ -84,7 +90,6 @@ func TestTransport(t *testing.T) {
 	} else if string(slurp) != body {
 		t.Errorf("Body = %q; want %q", slurp, body)
 	}
-
 }
 
 func TestTransportReusesConns(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
+    "time"
 	"github.com/bradfitz/http2/hpack"
 )
 
@@ -27,7 +27,7 @@ type Transport struct {
 
 	// TODO: remove this and make more general with a TLS dial hook, like http
 	InsecureTLSDial bool
-
+    Timeout time.Duration
 	connMu sync.Mutex
 	conns  map[string][]*clientConn // key is host:port
 }
@@ -37,7 +37,7 @@ type clientConn struct {
 	tconn    *tls.Conn
 	tlsState *tls.ConnectionState
 	connKey  []string // key(s) this connection is cached in, in t.conns
-
+    timeout    time.Duration
 	readerDone chan struct{} // closed on error
 	readerErr  error         // set before readerDone is closed
 	hdec       *hpack.Decoder
@@ -53,6 +53,7 @@ type clientConn struct {
 	br           *bufio.Reader
 	fr           *Framer
 	// Settings from peer:
+	bodybuf []byte
 	maxFrameSize         uint32
 	maxConcurrentStreams uint32
 	initialWindowSize    uint32
@@ -209,7 +210,6 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	if _, err := tconn.Write(clientPreface); err != nil {
 		return nil, err
 	}
-
 	cc := &clientConn{
 		t:                    t,
 		tconn:                tconn,
@@ -226,7 +226,6 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	cc.br = bufio.NewReader(tconn)
 	cc.fr = NewFramer(cc.bw, cc.br)
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-
 	cc.fr.WriteSettings()
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
 	cc.fr.WriteWindowUpdate(0, 1<<30) // um, 0x7fffffff doesn't work to Google? it hangs?
@@ -263,7 +262,10 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	})
 	// TODO: figure out henc size
 	cc.hdec = hpack.NewDecoder(initialHeaderTableSize, cc.onNewHeaderField)
-
+    if t.Timeout > 0 {
+        cc.timeout = t.Timeout
+        go cc.timeoutLoop()
+    }
 	go cc.readLoop()
 	return cc, nil
 }
@@ -306,6 +308,9 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	cs := cc.newStream()
 	hasBody := false // TODO
 
+    if req.Body != nil {
+        hasBody = true
+    }
 	// we send: HEADERS[+CONTINUATION] + (DATA?)
 	hdrs := cc.encodeHeaders(req)
 	first := true
@@ -328,27 +333,46 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 			cc.fr.WriteContinuation(cs.ID, endHeaders, chunk)
 		}
 	}
+    //目前这个模式只适合传输少量的数据，否则连接会被独占
+	if hasBody {
+		if cc.bodybuf == nil {
+			cc.bodybuf = make([]byte, cc.maxFrameSize)
+		}
+		for {
+			n, err := io.ReadFull(req.Body, cc.bodybuf)
+			if n > 0 && err == nil {
+				cc.fr.WriteData(cs.ID, false, cc.bodybuf[:n])
+			}
+			if  err == io.EOF || err == io.ErrUnexpectedEOF {
+				cc.fr.WriteData(cs.ID, true, cc.bodybuf[:n])
+				break
+			}
+			if err != nil {
+				cc.werr = err
+				break
+			}
+		}
+	}
 	cc.bw.Flush()
 	werr := cc.werr
 	cc.mu.Unlock()
-
-	if hasBody {
-		// TODO: write data. and it should probably be interleaved:
-		//   go ... io.Copy(dataFrameWriter{cc, cs, ...}, req.Body) ... etc
-	}
-
 	if werr != nil {
 		return nil, werr
 	}
+    select {
 
-	re := <-cs.resc
-	if re.err != nil {
-		return nil, re.err
-	}
-	res := re.res
-	res.Request = req
-	res.TLS = cc.tlsState
-	return res, nil
+    case re := <-cs.resc:
+        if re.err != nil {
+            return nil, re.err
+        }
+        res := re.res
+        res.Request = req
+        res.TLS = cc.tlsState
+        return res, nil
+    case <-cc.readerDone:
+        err := cc.readerErr
+        return nil, err
+    }
 }
 
 // requires cc.mu be held.
@@ -414,6 +438,20 @@ func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 	return cs
 }
 
+func (cc *clientConn) timeoutLoop() {
+    for {
+        time.Sleep(cc.timeout / 2)
+        cc.mu.Lock()
+        cc.fr.WritePing(false, [8]byte{'p','a','n','x','i','a','o','j'})
+	    cc.bw.Flush()
+        werr := cc.werr
+	    cc.mu.Unlock()
+        if werr != nil {
+            log.Println(werr)
+            break
+        }
+    }
+}
 // runs in its own goroutine.
 func (cc *clientConn) readLoop() {
 	defer cc.t.removeClientConn(cc)
@@ -438,6 +476,9 @@ func (cc *clientConn) readLoop() {
 	var continueStreamID uint32
 
 	for {
+        if cc.timeout > 0 {
+            cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
+        }
 		f, err := cc.fr.ReadFrame()
 		if err != nil {
 			cc.readerErr = err
