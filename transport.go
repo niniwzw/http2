@@ -408,7 +408,7 @@ func (cc *clientConn) encodeHeaders(req *http.Request) []byte {
 }
 
 func (cc *clientConn) writeHeader(name, value string) {
-	log.Printf("sending %q = %q", name, value)
+	//log.Printf("sending %q = %q", name, value)
 	cc.henc.WriteField(hpack.HeaderField{Name: name, Value: value})
 }
 
@@ -484,7 +484,7 @@ func (cc *clientConn) readLoop() {
 			cc.readerErr = err
 			return
 		}
-		log.Printf("Transport received %v: %#v", f.Header(), f)
+		//log.Printf("Transport received %v: %#v", f.Header(), f)
 
 		streamID := f.Header().StreamID
 
@@ -531,8 +531,13 @@ func (cc *clientConn) readLoop() {
 		case *ContinuationFrame:
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
-			log.Printf("DATA: %q", f.Data())
+			//log.Printf("DATA: %q", f.Data())
 			cs.pw.Write(f.Data())
+            //update stream window
+            cc.mu.Lock()
+            cc.fr.WriteWindowUpdate(streamID, uint32(len(f.Data())))
+            cc.bw.Flush()
+            cc.mu.Unlock()
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {

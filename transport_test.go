@@ -46,7 +46,7 @@ func TestTransportGet(t *testing.T) {
         buf := bytes.NewBufferString("")
         io.Copy(buf, r.Body)
 		buf.WriteTo(w)
-        time.Sleep(10 * time.Second)
+        time.Sleep(20 * time.Second)
 	}, optOnlyServer)
 	defer st.Close()
 

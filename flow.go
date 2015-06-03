@@ -7,6 +7,9 @@
 
 package http2
 
+import "log"
+
+var _ = log.Println
 // flow is the flow control window's size.
 type flow struct {
 	// n is the number of DATA bytes we're allowed to send.
@@ -30,6 +33,7 @@ func (f *flow) available() int32 {
 }
 
 func (f *flow) take(n int32) {
+	//log.Println("take = ", n, f.available())
 	if n > f.available() {
 		panic("internal error: took too much")
 	}
@@ -42,6 +46,7 @@ func (f *flow) take(n int32) {
 // add adds n bytes (positive or negative) to the flow control window.
 // It returns false if the sum would exceed 2^31-1.
 func (f *flow) add(n int32) bool {
+	//log.Println("add = ", n, f.available())
 	remain := (1<<31 - 1) - f.n
 	if n > remain {
 		return false

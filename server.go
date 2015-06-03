@@ -596,7 +596,6 @@ func (sc *serverConn) notePanic() {
 }
 
 func (sc *serverConn) serve() {
-	log.Println("server one...")
 	sc.serveG.check()
 	defer sc.notePanic()
 	defer sc.conn.Close()
