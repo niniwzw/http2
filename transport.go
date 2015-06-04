@@ -19,15 +19,16 @@ import (
 	"strings"
 	"sync"
     "time"
-	"github.com/bradfitz/http2/hpack"
+	"compress/gzip"
+	"github.com/niniwzw/http2/hpack"
 )
 
 type Transport struct {
 	Fallback http.RoundTripper
-
 	// TODO: remove this and make more general with a TLS dial hook, like http
 	InsecureTLSDial bool
     Timeout time.Duration
+	DisableCompression bool
 	connMu sync.Mutex
 	conns  map[string][]*clientConn // key is host:port
 }
@@ -42,7 +43,6 @@ type clientConn struct {
 	readerErr  error         // set before readerDone is closed
 	hdec       *hpack.Decoder
 	nextRes    *http.Response
-
 	mu           sync.Mutex
 	closed       bool
 	goAway       *GoAwayFrame // if non-nil, the GoAwayFrame we received
@@ -312,6 +312,12 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
         hasBody = true
     }
 	// we send: HEADERS[+CONTINUATION] + (DATA?)
+	if !cc.t.DisableCompression &&
+		req.Header.Get("Accept-Encoding") == "" &&
+		req.Header.Get("Range") == "" &&
+		req.Method != "HEAD" {
+		req.Header.Set("Accept-Encoding", "gzip")
+	}
 	hdrs := cc.encodeHeaders(req)
 	first := true
 	for len(hdrs) > 0 {
@@ -569,7 +575,11 @@ func (cc *clientConn) readLoop() {
 			// TODO: set the Body to one which notes the
 			// Close and also sends the server a
 			// RST_STREAM
-			cc.nextRes.Body = cs.pr
+			if cc.nextRes.Header.Get("Content-Encoding") == "gzip" {
+				cc.nextRes.Body = &gzipReader{body: cs.pr}
+			} else {
+				cc.nextRes.Body = cs.pr
+			}
 			res := cc.nextRes
 			activeRes[streamID] = cs
 			cs.resc <- resAndError{res: res}
@@ -596,4 +606,26 @@ func (cc *clientConn) onNewHeaderField(f hpack.HeaderField) {
 		return
 	}
 	cc.nextRes.Header.Add(http.CanonicalHeaderKey(f.Name), f.Value)
+	//log.Println("onNewHeaderField", cc.nextRes.Header)
+}
+
+// gzipReader wraps a response body so it can lazily
+// call gzip.NewReader on the first call to Read
+type gzipReader struct {
+	body io.ReadCloser // underlying Response.Body
+	zr   io.Reader     // lazily-initialized gzip reader
+}
+
+func (gz *gzipReader) Read(p []byte) (n int, err error) {
+	if gz.zr == nil {
+		gz.zr, err = gzip.NewReader(gz.body)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return gz.zr.Read(p)
+}
+
+func (gz *gzipReader) Close() error {
+	return gz.body.Close()
 }

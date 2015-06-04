@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bradfitz/http2/hpack"
+	"github.com/niniwzw/http2/hpack"
 )
 
 var stderrVerbose = flag.Bool("stderr_verbose", false, "Mirror verbosity to stderr, unbuffered")

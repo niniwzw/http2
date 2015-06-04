@@ -18,6 +18,7 @@ import (
     "bytes"
     "fmt"
 	"log"
+    "compress/gzip"
 )
 
 var (
@@ -39,6 +40,63 @@ func TestTransportExternal(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	res.Write(os.Stdout)
+}
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (w gzipResponseWriter) Flush() {
+	w.Writer.(*gzip.Writer).Flush()
+	w.ResponseWriter.(http.Flusher).Flush()
+}
+
+func makeGzipHandler(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			fn(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "text/javascript")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		fn(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	}
+}
+
+func TestTransportGzip(t *testing.T) {
+	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
+        buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
+		buf.WriteTo(w)
+	}), optOnlyServer)
+	defer st.Close()
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
+	defer tr.CloseIdleConnections()
+	req, err := http.NewRequest("GET", st.ts.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.Header.Get("Content-Length") != "1056" {
+		t.Fatal("Content-Length error.")
+	}
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 1 << 20 {
+		t.Fatal("data length error.")
+	}
 }
 
 func TestTransportGet(t *testing.T) {
