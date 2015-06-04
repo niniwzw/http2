@@ -15,3 +15,12 @@ Docs are at https://godoc.org/github.com/niniwzw/http2
 Demo test server at https://http2.golang.org/
 
 Help & bug reports welcome.
+
+    这个项目的主要目的是打造一类通用的服务器编程框架
+
+    很多时候我们都在寻找一类服务器框架，它只是tcp的一个简单封装，我们有完全的控制力。
+同时，性能非常高，并且编程非常容易。
+     当今最容易也是最普遍的web程序是 http的网页程序，一个链接代表一种功能，架构非常明晰。
+用浏览器就可以看，而不需要特殊的客户端。调试程序也是非常的方便。因为链接之间的程序往往是不相关的。
+这样就保持了独立性。
+     但是，http有致命的缺点，特别是在处理长连接，服务器推送数据的情况下。http2刚好弥补了这个缺点。
