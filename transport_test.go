@@ -99,6 +99,47 @@ func TestTransportGzip(t *testing.T) {
 	}
 }
 
+func TestTransportStream(t *testing.T) {
+	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
+        for {
+            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
+		    _, err := buf.WriteTo(w)
+            if err != nil {
+                log.Println(err)
+                time.Sleep(time.Second)
+            }
+        }
+	}), optOnlyServer)
+	defer st.Close()
+	tr := &Transport{InsecureTLSDial: true,
+    Timeout: 2 * time.Second,
+    DisableCompression: true}
+	defer tr.CloseIdleConnections()
+	req, err := http.NewRequest("GET", st.ts.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+    var read [1024]byte
+    var readn int
+    i := 0
+    for {
+        n , err := res.Body.Read(read[:])
+	    if err != nil {
+		    t.Fatal(err)
+	    }
+        readn += n
+        if i % 102400 == 0 {
+            log.Println("read", readn / (1024 * 1024), "MB")
+        }
+        i++
+    }
+}
+
 func TestTransportGet(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
         buf := bytes.NewBufferString("")

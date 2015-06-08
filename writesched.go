@@ -9,6 +9,7 @@ package http2
 
 import "fmt"
 import "log"
+var _ = log.Println
 // frameWriteMsg is a request to write a frame.
 type frameWriteMsg struct {
 	// write is the interface value that does the writing, once the
@@ -165,7 +166,7 @@ func (ws *writeScheduler) streamWritableBytes(q *writeQueue) int32 {
 	wm := q.head()
 	ret := wm.stream.flow.available() // max we can write
 	if ret == 0 {
-		log.Println("streamWritableBytes::id,flow,inflow", ret, wm.stream.id, wm.stream.flow.available(), wm.stream.inflow.available())
+		//log.Println("streamWritableBytes::id,flow,inflow", ret, wm.stream.id, wm.stream.flow.available(), wm.stream.inflow.available())
 		return 0
 	}
 	if int32(ws.maxFrameSize) < ret {

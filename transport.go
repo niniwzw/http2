@@ -228,7 +228,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
 	cc.fr.WriteSettings()
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
-	cc.fr.WriteWindowUpdate(0, 1<<30) // um, 0x7fffffff doesn't work to Google? it hangs?
+	cc.fr.WriteWindowUpdate(0, 1<<20) // um, 0x7fffffff doesn't work to Google? it hangs?
 	cc.bw.Flush()
 	if cc.werr != nil {
 		return nil, cc.werr
@@ -483,7 +483,7 @@ func (cc *clientConn) readLoop() {
 
 	for {
         if cc.timeout > 0 {
-			log.Println("set timeout", cc.timeout)
+			//log.Println("set timeout", cc.timeout)
             cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
         }
 		f, err := cc.fr.ReadFrame()
@@ -492,7 +492,7 @@ func (cc *clientConn) readLoop() {
 			cc.readerErr = err
 			return
 		}
-		log.Printf("Transport received %v: %#v", f.Header(), f)
+		//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 
 		streamID := f.Header().StreamID
 
@@ -546,7 +546,7 @@ func (cc *clientConn) readLoop() {
             cc.fr.WriteWindowUpdate(streamID, uint32(len(f.Data())))
             cc.bw.Flush()
             cc.mu.Unlock()
-			log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
+			//log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
