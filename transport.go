@@ -492,7 +492,7 @@ func (cc *clientConn) readLoop() {
 			cc.readerErr = err
 			return
 		}
-		//log.Printf("Transport received %v: %#v", f.Header(), f)
+		log.Printf("Transport received %v: %#v", f.Header(), f)
 
 		streamID := f.Header().StreamID
 
