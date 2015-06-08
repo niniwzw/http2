@@ -165,7 +165,7 @@ func (ws *writeScheduler) streamWritableBytes(q *writeQueue) int32 {
 	wm := q.head()
 	ret := wm.stream.flow.available() // max we can write
 	if ret == 0 {
-		log.Println("streamWritableBytes::", ret)
+		log.Println("streamWritableBytes::id,flow,inflow", ret, wm.stream.id, wm.stream.flow.available(), wm.stream.inflow.available())
 		return 0
 	}
 	if int32(ws.maxFrameSize) < ret {

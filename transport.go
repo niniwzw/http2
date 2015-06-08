@@ -546,6 +546,7 @@ func (cc *clientConn) readLoop() {
             cc.fr.WriteWindowUpdate(streamID, uint32(len(f.Data())))
             cc.bw.Flush()
             cc.mu.Unlock()
+			log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
