@@ -483,10 +483,12 @@ func (cc *clientConn) readLoop() {
 
 	for {
         if cc.timeout > 0 {
+			log.Println("set timeout", cc.timeout)
             cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
         }
 		f, err := cc.fr.ReadFrame()
 		if err != nil {
+			log.Println(err)
 			cc.readerErr = err
 			return
 		}
