@@ -112,8 +112,7 @@ func TestTransportStream(t *testing.T) {
 	}), optOnlyServer)
 	defer st.Close()
 	tr := &Transport{InsecureTLSDial: true,
-    Timeout: 2 * time.Second,
-    DisableCompression: true}
+    Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
 	req, err := http.NewRequest("GET", st.ts.URL, nil)
 	if err != nil {

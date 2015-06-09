@@ -492,7 +492,7 @@ func (cc *clientConn) readLoop() {
 			cc.readerErr = err
 			return
 		}
-		//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 
 		streamID := f.Header().StreamID
 
@@ -546,7 +546,7 @@ func (cc *clientConn) readLoop() {
             cc.fr.WriteWindowUpdate(streamID, uint32(len(f.Data())))
             cc.bw.Flush()
             cc.mu.Unlock()
-			//log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
+			log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
