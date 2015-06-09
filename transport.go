@@ -492,8 +492,11 @@ func (cc *clientConn) readLoop() {
 			cc.readerErr = err
 			return
 		}
-		log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
-
+	    if f.Header().Length > 50 {
+			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		} else {
+			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+		}
 		streamID := f.Header().StreamID
 
 		_, isContinue := f.(*ContinuationFrame)

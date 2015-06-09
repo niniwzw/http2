@@ -114,10 +114,11 @@ func TestTransportStreamServer(t *testing.T) {
 	select{}
 }
 
-func TestTransportStream(t *testing.T) {
-	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
+func TestTransportStreamClient(t *testing.T) {
+retry:
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:true}
 	defer tr.CloseIdleConnections()
-	req, err := http.NewRequest("GET", "", nil)
+	req, err := http.NewRequest("GET", "https://115.231.103.9:8000", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestTransportStream(t *testing.T) {
     for {
         n , err := res.Body.Read(read[:])
 	    if err != nil {
-		    t.Fatal(err)
+		    goto retry
 	    }
         readn += n
         if i % 102400 == 0 {
