@@ -64,6 +64,7 @@ type clientConn struct {
 type clientStream struct {
 	ID   uint32
 	resc chan resAndError
+    recvBytes uint32
 	pw   *io.PipeWriter
 	pr   *io.PipeReader
 }
@@ -218,7 +219,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		readerDone:           make(chan struct{}),
 		nextStreamID:         1,
 		maxFrameSize:         16 << 10, // spec default
-		initialWindowSize:    65535,    // spec default
+		initialWindowSize:    2 << 17 - 1,    // spec default
 		maxConcurrentStreams: 1000,     // "infinite", per spec. 1000 seems good enough.
 		streams:              make(map[uint32]*clientStream),
 	}
@@ -546,10 +547,14 @@ func (cc *clientConn) readLoop() {
 			cs.pw.Write(f.Data())
             //update stream window
             cc.mu.Lock()
-            cc.fr.WriteWindowUpdate(streamID, uint32(len(f.Data())))
-            cc.bw.Flush()
+            cs.recvBytes += uint32(len(f.Data()))
+            if cs.recvBytes >= (1 << 16 - 1) {
+                cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
+                cc.bw.Flush()
+                cs.recvBytes = 0
+			    log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
+            }
             cc.mu.Unlock()
-			log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {

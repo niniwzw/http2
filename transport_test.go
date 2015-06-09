@@ -106,7 +106,7 @@ func TestTransportStreamServer(t *testing.T) {
 		    _, err := buf.WriteTo(w)
             if err != nil {
                 log.Println(err)
-                time.Sleep(time.Second)
+                break
             }
         }
 	}), optOnlyServer)
