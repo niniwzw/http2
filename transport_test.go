@@ -117,7 +117,7 @@ func TestTransportStreamServer(t *testing.T) {
 func TestTransportStream(t *testing.T) {
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-	req, err := http.NewRequest("GET", st.ts.URL, nil)
+	req, err := http.NewRequest("GET", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

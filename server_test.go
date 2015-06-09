@@ -133,7 +133,7 @@ func newServerTester(t testing.TB, handler http.HandlerFunc, opts ...interface{}
 		st.cc = cc
 		st.fr = NewFramer(cc, cc)
 	}
-
+	log.Println(st.ts.URL)
 	return st
 }
 
