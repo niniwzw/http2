@@ -99,7 +99,7 @@ func TestTransportGzip(t *testing.T) {
 	}
 }
 
-func TestTransportStream(t *testing.T) {
+func TestTransportStreamServer(t *testing.T) {
 	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
         for {
             buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
@@ -111,8 +111,11 @@ func TestTransportStream(t *testing.T) {
         }
 	}), optOnlyServer)
 	defer st.Close()
-	tr := &Transport{InsecureTLSDial: true,
-    Timeout: 2 * time.Second}
+	select{}
+}
+
+func TestTransportStream(t *testing.T) {
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
 	req, err := http.NewRequest("GET", st.ts.URL, nil)
 	if err != nil {
