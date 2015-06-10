@@ -150,7 +150,6 @@ func TestTransportStreamServer(t *testing.T) {
             if err != nil {
                 log.Println(err)
                 quit <- struct{}{}
-                quitserver <- struct{}{}
                 break
             }
         }
@@ -174,6 +173,9 @@ retry:
 	defer res.Body.Close()
     i := 0
     decoder := json.NewDecoder(res.Body)
+    var avg time.Duration
+    var high time.Duration
+    var low = 3600 * time.Second
     for {
         var ti tick
         err := decoder.Decode(&ti)
@@ -181,10 +183,25 @@ retry:
             log.Println(err)
             goto retry
         }
-        if i % 10000 == 0 {
-            log.Println("read", i)
+        ti.TimeRecv = time.Now()
+        dt := ti.TimeRecv.Sub(ti.TimeGen)
+        avg += dt
+        if dt > high {
+            high = dt
+        }
+        if dt < low {
+            low = dt
         }
         i++
+        if i % 10000 == 0 && i > 0 {
+            log.Println("read", i)
+            log.Println("avg", avg / 10000)
+            log.Println("high", high)
+            log.Println("low", low)
+            avg = time.Duration(0)
+            high = time.Duration(0)
+            low  = 3600 * time.Second
+        }
     }
 }
 

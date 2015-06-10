@@ -494,9 +494,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+			//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -551,8 +551,8 @@ func (cc *clientConn) readLoop() {
             if cs.recvBytes >= (1 << 16 - 1) {
                 cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
                 cc.bw.Flush()
+			    //log.Println("WriteWindowUpdate::", streamID, cs.recvBytes)
                 cs.recvBytes = 0
-			    log.Println("WriteWindowUpdate::", streamID, uint32(len(f.Data())))
             }
             cc.mu.Unlock()
 		case *GoAwayFrame:
