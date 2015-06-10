@@ -18,6 +18,8 @@ import (
     "bytes"
     "fmt"
 	"log"
+    "math/rand"
+    "encoding/json"
     "compress/gzip"
 )
 
@@ -99,24 +101,67 @@ func TestTransportGzip(t *testing.T) {
 	}
 }
 
-func TestTransportStreamServer(t *testing.T) {
-	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
+type tick struct {
+    TimeGen  time.Time  `json:"gen"`
+    TimeSend time.Time  `json:"send"`
+    TimeRecv time.Time  `json:"recv"`
+    Ask float64 `json:"ask"`
+    Bid float64 `json:"bid"`
+    Askv float64 `json:"askv"`
+    Bidv float64 `json:"bidv"`
+}
+
+var r = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+func gentick() *tick {
+    ti := &tick{}
+    ti.TimeGen = time.Now()
+    ti.Ask =  r.Float64()
+    ti.Bid =  r.Float64()
+    ti.Askv = r.Float64()
+    ti.Bidv = r.Float64()
+    return ti
+}
+
+
+func ticksource(ch chan *tick) chan struct{} {
+    quit := make(chan struct{})
+    go func (quit chan struct{}) {
         for {
-            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
-		    _, err := buf.WriteTo(w)
+            select {
+            case ch <-gentick():
+            case <-quit:
+                return
+            }
+        }
+    }(quit)
+    return quit
+}
+
+func TestTransportStreamServer(t *testing.T) {
+    quitserver := make(chan struct{})
+	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
+        ti := make (chan *tick)
+        quit := ticksource(ti)
+        encoder := json.NewEncoder(w)
+        for {
+            t := <-ti
+            err := encoder.Encode(t)
             if err != nil {
                 log.Println(err)
+                quit <- struct{}{}
+                quitserver <- struct{}{}
                 break
             }
         }
 	}), optOnlyServer)
 	defer st.Close()
-	select{}
+	<-quitserver
 }
 
 func TestTransportStreamClient(t *testing.T) {
 retry:
-	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:true}
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:false}
 	defer tr.CloseIdleConnections()
 	req, err := http.NewRequest("GET", "https://115.231.103.9:8000", nil)
 	if err != nil {
@@ -127,17 +172,17 @@ retry:
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-    var read [1024]byte
-    var readn int
     i := 0
+    decoder := json.NewDecoder(res.Body)
     for {
-        n , err := res.Body.Read(read[:])
-	    if err != nil {
-		    goto retry
-	    }
-        readn += n
-        if i % 102400 == 0 {
-            log.Println("read", readn / (1024 * 1024), "MB")
+        var ti tick
+        err := decoder.Decode(&ti)
+        if err != nil {
+            log.Println(err)
+            goto retry
+        }
+        if i % 10000 == 0 {
+            log.Println("read", i)
         }
         i++
     }
