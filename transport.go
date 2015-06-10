@@ -219,7 +219,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		readerDone:           make(chan struct{}),
 		nextStreamID:         1,
 		maxFrameSize:         16 << 10, // spec default
-		initialWindowSize:    2 << 17 - 1,    // spec default
+		initialWindowSize:    2 << 16 - 1,    // spec default
 		maxConcurrentStreams: 1000,     // "infinite", per spec. 1000 seems good enough.
 		streams:              make(map[uint32]*clientStream),
 	}
@@ -227,7 +227,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	cc.br = bufio.NewReader(tconn)
 	cc.fr = NewFramer(cc.bw, cc.br)
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-	cc.fr.WriteSettings()
+    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:2<<17-1})
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
 	cc.fr.WriteWindowUpdate(0, 1<<20) // um, 0x7fffffff doesn't work to Google? it hangs?
 	cc.bw.Flush()

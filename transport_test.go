@@ -138,7 +138,7 @@ func ticksource(ch chan *tick) chan struct{} {
     return quit
 }
 
-func TestTransportStreamServer(t *testing.T) {
+func tserver(t *testing.T) (*serverTester, chan struct{}) {
     quitserver := make(chan struct{})
 	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
         ti := make (chan *tick)
@@ -154,15 +154,20 @@ func TestTransportStreamServer(t *testing.T) {
             }
         }
 	}), optOnlyServer)
-	defer st.Close()
+    return st, quitserver
+}
+
+func TestTransportStreamServer(t *testing.T) {
+    st, quitserver := tserver(t)
+    defer st.Close()
 	<-quitserver
 }
 
-func TestTransportStreamClient(t *testing.T) {
+func tclient(t *testing.T, url string) {
 retry:
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:false}
 	defer tr.CloseIdleConnections()
-	req, err := http.NewRequest("GET", "https://115.231.103.9:8000", nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,6 +208,16 @@ retry:
             low  = 3600 * time.Second
         }
     }
+}
+
+func TestTransportStreamClient(t *testing.T) {
+    tclient(t, "https://115.231.103.9:8000")
+}
+
+func TestTransportServerClient(t *testing.T) {
+    st, _ := tserver(t)
+    defer st.Close()
+    tclient(t, st.ts.URL)
 }
 
 func TestTransportGet(t *testing.T) {
