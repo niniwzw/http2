@@ -152,7 +152,7 @@ func tserver(t *testing.T) (*serverTester, chan struct{}) {
                 quit <- struct{}{}
                 break
             }
-			w.Flush()
+			w.(http.Flusher).Flush()
         }
 	}), optOnlyServer)
     return st, quitserver
