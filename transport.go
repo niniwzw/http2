@@ -218,8 +218,8 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		tlsState:             &state,
 		readerDone:           make(chan struct{}),
 		nextStreamID:         1,
-		maxFrameSize:         16 << 10, // spec default
-		initialWindowSize:    2 << 16 - 1,    // spec default
+		maxFrameSize:         1 << 14, // spec default
+		initialWindowSize:    1 << 17 - 1,    // spec default
 		maxConcurrentStreams: 1000,     // "infinite", per spec. 1000 seems good enough.
 		streams:              make(map[uint32]*clientStream),
 	}
@@ -227,7 +227,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	cc.br = bufio.NewReader(tconn)
 	cc.fr = NewFramer(cc.bw, cc.br)
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:2<<17-1})
+    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:cc.initialWindowSize})
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
 	cc.fr.WriteWindowUpdate(0, 1<<20) // um, 0x7fffffff doesn't work to Google? it hangs?
 	cc.bw.Flush()
@@ -495,9 +495,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-			//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -549,10 +549,10 @@ func (cc *clientConn) readLoop() {
             //update stream window
             cc.mu.Lock()
             cs.recvBytes += uint32(len(f.Data()))
-            if cs.recvBytes >= (1 << 16 - 1) {
+            if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
                 cc.bw.Flush()
-			    //log.Println("WriteWindowUpdate::", streamID, cs.recvBytes)
+			    log.Println("WriteWindowUpdate::", streamID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
             cc.mu.Unlock()

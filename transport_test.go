@@ -165,7 +165,7 @@ func TestTransportStreamServer(t *testing.T) {
 
 func tclient(t *testing.T, url string) {
 retry:
-	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:false}
+	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression:false}
 	defer tr.CloseIdleConnections()
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
