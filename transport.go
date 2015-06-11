@@ -477,6 +477,7 @@ func (cc *clientConn) readLoop() {
 		for _, cs := range activeRes {
 			cs.pw.CloseWithError(err)
 		}
+		log.Println("end read loop")
 	}()
 
 	// continueStreamID is the stream ID we're waiting for
@@ -545,8 +546,11 @@ func (cc *clientConn) readLoop() {
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
 			//log.Printf("DATA: %q", f.Data())
+			log.Printf("[WB]")
 			cs.pw.Write(f.Data())
+			log.Printf("[WE]")
             //update stream window
+			log.Printf("[LB]")
             cc.mu.Lock()
             cs.recvBytes += uint32(len(f.Data()))
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
@@ -556,6 +560,7 @@ func (cc *clientConn) readLoop() {
                 cs.recvBytes = 0
             }
             cc.mu.Unlock()
+			log.Printf("[LE]")
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
