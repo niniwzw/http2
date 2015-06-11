@@ -163,17 +163,16 @@ func TestTransportStreamServer(t *testing.T) {
 	<-quitserver
 }
 
-func tclient(t *testing.T, url strini, sleep time.Duration) {
+func getdata(tr *Transport, url string, sleep time.Duration) {
 retry:
-	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:false}
-	defer tr.CloseIdleConnections()
-	req, err := http.NewRequest("GET", url, nil)
+    req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		t.Fatal(err)
+		log.Println(err)
 	}
 	res, err := tr.RoundTrip(req)
 	if err != nil {
-		t.Fatal(err)
+		log.Println(err)
+        goto retry
 	}
 	defer res.Body.Close()
     i := 0
@@ -211,14 +210,29 @@ retry:
     }
 }
 
+func tclient(t *testing.T, url string, n int) {
+	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression:false}
+	defer tr.CloseIdleConnections()
+    done := make(chan struct{}, n)
+    for i := 0; i < n; i++ {
+        go func () {
+            getdata(tr, url)
+            done<-struct{}{}
+        }()
+    }
+    for i := 0; i < n; i++ {
+        <-done
+    }
+}
+
 func TestTransportStreamClient(t *testing.T) {
-    tclient(t, "https://115.231.103.9:8000")
+    tclient(t, "https://115.231.103.9:8000", 10)
 }
 
 func TestTransportServerClient(t *testing.T) {
     st, _ := tserver(t)
     defer st.Close()
-    tclient(t, st.ts.URL)
+    tclient(t, st.ts.URL, 10)
 }
 
 func TestTransportGet(t *testing.T) {

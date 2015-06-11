@@ -190,6 +190,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		NextProtos:         []string{NextProtoTLS},
 		InsecureSkipVerify: t.InsecureTLSDial,
 	}
+    log.Println("newClientConn->", host+":"+port)
 	tconn, err := tls.Dial("tcp", host+":"+port, cfg)
 	if err != nil {
 		return nil, err
@@ -220,8 +221,8 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		tlsState:             &state,
 		readerDone:           make(chan struct{}),
 		nextStreamID:         1,
-		maxFrameSize:         16 << 10, // spec default
-		initialWindowSize:    2 << 16 - 1,    // spec default
+		maxFrameSize:         1 << 14, // spec default
+		initialWindowSize:    1 << 17 - 1,    // spec default
 		maxConcurrentStreams: 1000,     // "infinite", per spec. 1000 seems good enough.
 		streams:              make(map[uint32]*clientStream),
 	}
@@ -229,7 +230,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	cc.br = bufio.NewReader(tconn)
 	cc.fr = NewFramer(cc.bw, cc.br)
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:2<<17-1})
+    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:cc.initialWindowSize})
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
 	cc.fr.WriteWindowUpdate(0, 1<<20) // um, 0x7fffffff doesn't work to Google? it hangs?
 	cc.bw.Flush()
@@ -461,6 +462,7 @@ func (cc *clientConn) timeoutLoop() {
         }
     }
 }
+
 // runs in its own goroutine.
 func (cc *clientConn) readLoop() {
 	defer cc.t.removeClientConn(cc)
@@ -478,6 +480,7 @@ func (cc *clientConn) readLoop() {
 		for _, cs := range activeRes {
 			cs.pw.CloseWithError(err)
 		}
+		log.Println("end read loop")
 	}()
 
 	// continueStreamID is the stream ID we're waiting for
@@ -546,17 +549,21 @@ func (cc *clientConn) readLoop() {
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
 			//log.Printf("DATA: %q", f.Data())
+			log.Printf("[WB]")
 			cs.pw.Write(f.Data())
+			log.Printf("[WE]")
             //update stream window
+			log.Printf("[LB]")
             cc.mu.Lock()
             cs.recvBytes += uint32(len(f.Data()))
-            if cs.recvBytes >= (1 << 16 - 1) {
+            if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
                 cc.bw.Flush()
-			    log.Println("WriteWindowUpdate::", streamID, cs.recvBytes)
+			    log.Println("WriteWindowUpdate::", streamID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
             cc.mu.Unlock()
+			log.Printf("[LE]")
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
