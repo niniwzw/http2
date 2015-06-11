@@ -163,7 +163,7 @@ func TestTransportStreamServer(t *testing.T) {
 	<-quitserver
 }
 
-func tclient(t *testing.T, url string) {
+func tclient(t *testing.T, url strini, sleep time.Duration) {
 retry:
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second, DisableCompression:false}
 	defer tr.CloseIdleConnections()
@@ -182,6 +182,7 @@ retry:
     var high time.Duration
     var low = 3600 * time.Second
     for {
+        time.Sleep(sleep)
         var ti tick
         err := decoder.Decode(&ti)
         if err != nil {
@@ -349,4 +350,16 @@ func TestTransportAbortClosesPipes(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestPingTime(t *testing.T) {
+    ping1 := newPingTime(time.Millisecond * (1024-1))
+    data := ping1.Bytes()
+    ping2 := newPingTimeBytes(data[:])
+    t1, dt1 := ping1.GetTime()
+    t2, dt2 := ping2.GetTime()
+    if t1 != t2 || dt1 != dt2 {
+        t.Error("copy ping time error.")
+        return
+    }
 }

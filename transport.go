@@ -21,6 +21,7 @@ import (
     "time"
 	"compress/gzip"
 	"github.com/niniwzw/http2/hpack"
+    "encoding/binary"
 )
 
 type Transport struct {
@@ -39,6 +40,7 @@ type clientConn struct {
 	tlsState *tls.ConnectionState
 	connKey  []string // key(s) this connection is cached in, in t.conns
     timeout    time.Duration
+    rtt        time.Duration
 	readerDone chan struct{} // closed on error
 	readerErr  error         // set before readerDone is closed
 	hdec       *hpack.Decoder
@@ -234,7 +236,6 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	if cc.werr != nil {
 		return nil, cc.werr
 	}
-
 	// Read the obligatory SETTINGS frame
 	f, err := cc.fr.ReadFrame()
 	if err != nil {
@@ -449,7 +450,8 @@ func (cc *clientConn) timeoutLoop() {
     for {
         time.Sleep(cc.timeout / 2)
         cc.mu.Lock()
-        cc.fr.WritePing(false, [8]byte{'p','a','n','x','i','a','o','j'})
+        pingtime := newPingTime(cc.rtt)
+        cc.fr.WritePing(false, pingtime.Bytes())
 	    cc.bw.Flush()
         werr := cc.werr
 	    cc.mu.Unlock()
@@ -639,4 +641,43 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 
 func (gz *gzipReader) Close() error {
 	return gz.body.Close()
+}
+
+
+type pingTime uint64
+
+func (p pingTime) Bytes() [8]byte {
+    var data [8]byte
+    buf := bytes.NewBuffer(data[:])
+    buf.Reset()
+    err := binary.Write(buf, binary.BigEndian, p)
+    if err != nil {
+        log.Println(err)
+    }
+    return data
+}
+
+func newPingTime(dt time.Duration) pingTime {
+    n := time.Now().Unix()
+    msec := int64(time.Now().Nanosecond()) / int64(time.Millisecond)
+    dt = dt / time.Millisecond
+    tail := uint32(dt << 9) | uint32(msec)
+    t := pingTime(n << 32 | int64(tail))
+    return t
+}
+
+func newPingTimeBytes(b []byte) pingTime {
+    var ret pingTime
+    err := binary.Read(bytes.NewBuffer(b), binary.BigEndian, &ret)
+    if err != nil {
+        log.Println(err)
+    }
+    return ret
+}
+
+func (p pingTime) GetTime() (time.Time, time.Duration) {
+    n := p >> 32
+    msec := p & (1<<10 - 1)
+    dt := (p >> 9) & (1<<23-1)
+    return time.Unix(int64(n), int64(msec) * int64(time.Millisecond)), time.Duration(dt) * time.Millisecond
 }
