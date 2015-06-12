@@ -498,9 +498,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -548,20 +548,20 @@ func (cc *clientConn) readLoop() {
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
 			//log.Printf("DATA: %q", f.Data())
-			log.Printf("[WB]")
+			//log.Printf("[WB]")
 			cs.pw.Write(f.Data())
-			log.Printf("[WE]")
+			//log.Printf("[WE]")
             //update stream window
-			log.Printf("[LB]")
+			//log.Printf("[LB]")
             cc.mu.Lock()
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
                 cc.bw.Flush()
-			    log.Println("WriteWindowUpdate::", streamID, cc.initialWindowSize, cs.recvBytes)
+			    //log.Println("WriteWindowUpdate::", streamID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
             cc.mu.Unlock()
-			log.Printf("[LE]")
+			//log.Printf("[LE]")
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
@@ -608,7 +608,7 @@ func (cc *clientConn) readLoop() {
 func (cc *clientConn) onNewHeaderField(f hpack.HeaderField) {
 	// TODO: verifiy pseudo headers come before non-pseudo headers
 	// TODO: verifiy the status is set
-	log.Printf("Header field: %+v", f)
+	//log.Printf("Header field: %+v", f)
 	if f.Name == ":status" {
 		code, err := strconv.Atoi(f.Value)
 		if err != nil {

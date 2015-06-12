@@ -196,6 +196,7 @@ type pipe2 struct {
     pr *PipeReader
     pw *PipeWriter
     err error
+    closed bool
 }
 
 func newpipe2() *pipe2 {
@@ -207,7 +208,11 @@ func newpipe2() *pipe2 {
 // Read waits until data is available and copies bytes
 // from the buffer into p.
 func (r *pipe2) Read(p []byte) (n int, err error) {
-	return r.pr.Read(p)
+	n, err = r.pr.Read(p)
+    if err != nil && r.err != nil {
+        err = r.err
+    }
+    return
 }
 
 // Write copies bytes from p into the buffer and wakes a reader.
@@ -217,6 +222,10 @@ func (w *pipe2) Write(p []byte) (n int, err error) {
 }
 
 func (c *pipe2) Close(err error) {
+    if c.closed {
+        return
+    }
+    c.closed = true
     c.err = err
     log.Println("[pipe2.Close]", err)
     c.pw.Close()
