@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
     "bytes"
     "io"
+    "log"
 )
 
 // ErrClosedPipe is the error used for read or write operations on a closed pipe.
@@ -217,6 +218,6 @@ func (w *pipe2) Write(p []byte) (n int, err error) {
 
 func (c *pipe2) Close(err error) {
     c.err = err
-	c.pr.Close()
+    log.Println("[pipe2.Close]", err)
     c.pw.Close()
 }
