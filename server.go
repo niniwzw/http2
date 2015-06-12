@@ -394,7 +394,7 @@ type requestParam struct {
 type stream struct {
 	// immutable:
 	id   uint32
-	body *pipe       // non-nil if expecting DATA frames
+	body *pipe2       // non-nil if expecting DATA frames
 	cw   closeWaiter // closed wait stream transitions to closed state
 
 	// owned by serverConn's serve loop:
@@ -1402,11 +1402,7 @@ func (sc *serverConn) newWriterAndRequest() (*responseWriter, *http.Request, err
 		Body:       body,
 	}
 	if bodyOpen {
-		body.pipe = &pipe{
-			b: buffer{buf: make([]byte, initialWindowSize)}, // TODO: share/remove XXX
-		}
-		body.pipe.c.L = &body.pipe.m
-
+		body.pipe = newpipe2()
 		if vv, ok := rp.header["Content-Length"]; ok {
 			req.ContentLength, _ = strconv.ParseInt(vv[0], 10, 64)
 		} else {
@@ -1545,7 +1541,7 @@ type requestBody struct {
 	stream        *stream
 	conn          *serverConn
 	closed        bool
-	pipe          *pipe // non-nil if we have a HTTP entity message body
+	pipe          *pipe2 // non-nil if we have a HTTP entity message body
 	needsContinue bool  // need to send a 100-continue
 }
 

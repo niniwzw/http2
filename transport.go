@@ -67,8 +67,8 @@ type clientStream struct {
 	ID   uint32
 	resc chan resAndError
     recvBytes uint32
-	pw   *io.PipeWriter
-	pr   *io.PipeReader
+	pw   *PipeWriter
+	pr   *PipeReader
 }
 
 type stickyErrWriter struct {
@@ -489,7 +489,6 @@ func (cc *clientConn) readLoop() {
 
 	for {
         if cc.timeout > 0 {
-			//log.Println("set timeout", cc.timeout)
             cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
         }
 		f, err := cc.fr.ReadFrame()
@@ -543,7 +542,7 @@ func (cc *clientConn) readLoop() {
 				ProtoMajor: 2,
 				Header:     make(http.Header),
 			}
-			cs.pr, cs.pw = io.Pipe()
+			cs.pr, cs.pw = Pipe()
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *ContinuationFrame:
 			cc.hdec.Write(f.HeaderBlockFragment())
@@ -555,7 +554,6 @@ func (cc *clientConn) readLoop() {
             //update stream window
 			log.Printf("[LB]")
             cc.mu.Lock()
-            cs.recvBytes += uint32(len(f.Data()))
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
                 cc.bw.Flush()
@@ -596,9 +594,9 @@ func (cc *clientConn) readLoop() {
 			// Close and also sends the server a
 			// RST_STREAM
 			if cc.nextRes.Header.Get("Content-Encoding") == "gzip" {
-				cc.nextRes.Body = &gzipReader{body: cs.pr}
+                cc.nextRes.Body = &gzipReader{body: cs.pr, cc:cc, cs:cs}
 			} else {
-				cc.nextRes.Body = cs.pr
+                cc.nextRes.Body = &gzipReader{body: cs.pr, zr : cs.pr, cc:cc, cs:cs}
 			}
 			res := cc.nextRes
 			activeRes[streamID] = cs
@@ -634,6 +632,8 @@ func (cc *clientConn) onNewHeaderField(f hpack.HeaderField) {
 type gzipReader struct {
 	body io.ReadCloser // underlying Response.Body
 	zr   io.Reader     // lazily-initialized gzip reader
+    cc *clientConn
+    cs *clientStream
 }
 
 func (gz *gzipReader) Read(p []byte) (n int, err error) {
@@ -643,7 +643,13 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 			return 0, err
 		}
 	}
-	return gz.zr.Read(p)
+    n , err = gz.zr.Read(p)
+    gz.cc.mu.Lock()
+    count := gz.cs.pr.GetReadCount()
+    gz.cs.pr.ResetReadCount()
+    gz.cs.recvBytes += uint32(count)
+    gz.cc.mu.Unlock()
+    return
 }
 
 func (gz *gzipReader) Close() error {

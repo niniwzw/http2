@@ -216,13 +216,22 @@ func tclient(t *testing.T, url string, n int) {
     done := make(chan struct{}, n)
     for i := 0; i < n; i++ {
         go func () {
-            getdata(tr, url)
+            getdata(tr, url, 0)
             done<-struct{}{}
         }()
     }
     for i := 0; i < n; i++ {
         <-done
     }
+}
+
+func TestTransportReadSleep(t *testing.T) {
+    st, _ := tserver(t)
+	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression:false}
+	defer tr.CloseIdleConnections()
+
+    go getdata(tr, st.ts.URL, 10 * time.Second)
+    getdata(tr, st.ts.URL, 0 * time.Second)
 }
 
 func TestTransportStreamClient(t *testing.T) {
