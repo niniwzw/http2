@@ -278,36 +278,44 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 }
 
 func (cc *clientConn) setGoAway(f *GoAwayFrame) {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
+	cc.Lock()
+	defer cc.Unlock()
 	cc.goAway = f
 }
 
+func (cc *clientConn) Lock() {
+    cc.mu.Lock()
+}
+
+func (cc *clientConn) Unlock() {
+    cc.mu.Unlock()
+}
+
 func (cc *clientConn) canTakeNewRequest() bool {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
+	cc.Lock()
+	defer cc.Unlock()
 	return cc.goAway == nil &&
 		int64(len(cc.streams)+1) < int64(cc.maxConcurrentStreams) &&
 		cc.nextStreamID < 2147483647
 }
 
 func (cc *clientConn) closeIfIdle() {
-	cc.mu.Lock()
+	cc.Lock()
 	if len(cc.streams) > 0 {
-		cc.mu.Unlock()
+		cc.Unlock()
 		return
 	}
 	cc.closed = true
 	// TODO: do clients send GOAWAY too? maybe? Just Close:
-	cc.mu.Unlock()
+	cc.Unlock()
 
 	cc.tconn.Close()
 }
 
 func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
-	cc.mu.Lock()
+	cc.Lock()
 	if cc.closed {
-		cc.mu.Unlock()
+		cc.Unlock()
 		return nil, errClientConnClosed
 	}
 
@@ -367,27 +375,26 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	}
 	cc.bw.Flush()
 	werr := cc.werr
-	cc.mu.Unlock()
+	cc.Unlock()
 	if werr != nil {
 		return nil, werr
 	}
 	//wirte dataframe
 	go func () {
 		for {
-			_, ok :=  <-cs.notify
+			recv, ok :=  <-cs.notify
 			if !ok {
-				log.Println("stream closed")
+				log.Println(recv, "stream closed")
 				break
 			}
-            cc.mu.Lock()
-			log.Println("recvBytes = ", cs.recvBytes, cc.initialWindowSize / 2)
+            cc.Lock()
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                 cc.bw.Flush()
 			    log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
-            cc.mu.Unlock()
+            cc.Unlock()
 		}
 	}()
 
@@ -462,11 +469,10 @@ func (cc *clientConn) newStream() *clientStream {
 }
 
 func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
+	cc.Lock()
+	defer cc.Unlock()
 	cs , ok := cc.streams[id]
 	if ok && andRemove {
-		close(cs.notify)
 		delete(cc.streams, id)
 	}
 	return cs
@@ -475,12 +481,12 @@ func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 func (cc *clientConn) timeoutLoop() {
     for {
         time.Sleep(cc.timeout / 2)
-        cc.mu.Lock()
+        cc.Lock()
         pingtime := newPingTime(cc.rtt)
         cc.fr.WritePing(false, pingtime.Bytes())
 	    cc.bw.Flush()
         werr := cc.werr
-	    cc.mu.Unlock()
+	    cc.Unlock()
         if werr != nil {
             log.Println(werr)
             break
@@ -523,9 +529,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		    log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -547,6 +553,7 @@ func (cc *clientConn) readLoop() {
 		if streamID%2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
+            log.Println("streamID error.")
 			continue
 		}
 		streamEnded := false
@@ -572,13 +579,7 @@ func (cc *clientConn) readLoop() {
 		case *ContinuationFrame:
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
-			//log.Printf("DATA: %q", f.Data())
-			//log.Printf("[WB]")
 			cs.pw.Write(f.Data())
-			//log.Printf("[WE]")
-            //update stream window
-			//log.Printf("[LB]")
-			//log.Printf("[LE]")
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
@@ -661,12 +662,15 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 		}
 	}
     n , err = gz.zr.Read(p)
-    gz.cc.mu.Lock()
+    gz.cc.Lock()
     count := gz.cs.pr.GetReadCount()
     gz.cs.pr.ResetReadCount()
     gz.cs.recvBytes += uint32(count)
-	gz.cs.notify <- gz.cs.recvBytes
-    gz.cc.mu.Unlock()
+    gz.cc.Unlock()
+    gz.cs.notify <- 1
+    if err != nil {
+        close(gz.cs.notify)
+    }
     return
 }
 

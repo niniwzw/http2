@@ -254,7 +254,7 @@ func TestTransportGet(t *testing.T) {
         log.Println("wait ready body")
         io.Copy(buf, r.Body)
 		buf.WriteTo(w)
-        time.Sleep(2 * time.Second)
+        time.Sleep(10 * time.Second)
 	}, optOnlyServer)
 	defer st.Close()
 
@@ -292,7 +292,9 @@ func TestTransportGet(t *testing.T) {
 	if res.TLS == nil {
 		t.Error("Response.TLS = nil; want non-nil")
 	}
+    log.Println("read begin")
 	slurp, err := ioutil.ReadAll(res.Body)
+    log.Println("read end")
 	if err != nil {
 		t.Errorf("Body read: %v", err)
 	} else if string(slurp) != body {
