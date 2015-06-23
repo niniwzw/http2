@@ -67,6 +67,7 @@ type clientStream struct {
 	ID   uint32
 	resc chan resAndError
     recvBytes uint32
+	notify chan uint32
 	pw   *PipeWriter
 	pr   *PipeReader
 }
@@ -136,6 +137,9 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
+	for key, _ := range cc.streams {
+		cc.streamByID(key, true)
+	}
 	t.connMu.Lock()
 	defer t.connMu.Unlock()
 	for _, key := range cc.connKey {
@@ -206,7 +210,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	state := tconn.ConnectionState()
 	if p := state.NegotiatedProtocol; p != NextProtoTLS {
 		// TODO(bradfitz): fall back to Fallback
-		return nil, fmt.Errorf("bad protocol: %v", p)
+		return nil, fmt.Errorf("newClientConn::bad protocol: %v", p)
 	}
 	if !state.NegotiatedProtocolIsMutual {
 		return nil, errors.New("could not negotiate protocol mutually")
@@ -302,7 +306,6 @@ func (cc *clientConn) closeIfIdle() {
 
 func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	cc.mu.Lock()
-
 	if cc.closed {
 		cc.mu.Unlock()
 		return nil, errClientConnClosed
@@ -368,6 +371,26 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	if werr != nil {
 		return nil, werr
 	}
+	//wirte dataframe
+	go func () {
+		for {
+			_, ok :=  <-cs.notify
+			if !ok {
+				log.Println("stream closed")
+				break
+			}
+            cc.mu.Lock()
+			log.Println("recvBytes = ", cs.recvBytes, cc.initialWindowSize / 2)
+            if cs.recvBytes >= (cc.initialWindowSize / 2) {
+                cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
+                cc.bw.Flush()
+			    log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+                cs.recvBytes = 0
+            }
+            cc.mu.Unlock()
+		}
+	}()
+
     select {
 
     case re := <-cs.resc:
@@ -432,6 +455,7 @@ func (cc *clientConn) newStream() *clientStream {
 		ID:   cc.nextStreamID,
 		resc: make(chan resAndError, 1),
 	}
+	cs.notify = make(chan uint32, 1)
 	cc.nextStreamID += 2
 	cc.streams[cs.ID] = cs
 	return cs
@@ -440,8 +464,9 @@ func (cc *clientConn) newStream() *clientStream {
 func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
-	cs := cc.streams[id]
-	if andRemove {
+	cs , ok := cc.streams[id]
+	if ok && andRemove {
+		close(cs.notify)
 		delete(cc.streams, id)
 	}
 	return cs
@@ -553,14 +578,6 @@ func (cc *clientConn) readLoop() {
 			//log.Printf("[WE]")
             //update stream window
 			//log.Printf("[LB]")
-            cc.mu.Lock()
-            if cs.recvBytes >= (cc.initialWindowSize / 2) {
-                cc.fr.WriteWindowUpdate(streamID, cs.recvBytes)
-                cc.bw.Flush()
-			    //log.Println("WriteWindowUpdate::", streamID, cc.initialWindowSize, cs.recvBytes)
-                cs.recvBytes = 0
-            }
-            cc.mu.Unlock()
 			//log.Printf("[LE]")
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
@@ -648,6 +665,7 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
     count := gz.cs.pr.GetReadCount()
     gz.cs.pr.ResetReadCount()
     gz.cs.recvBytes += uint32(count)
+	gz.cs.notify <- gz.cs.recvBytes
     gz.cc.mu.Unlock()
     return
 }
