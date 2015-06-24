@@ -391,7 +391,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                 cc.bw.Flush()
-			    log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+			    //log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
             cc.Unlock()
@@ -529,9 +529,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-		    log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -553,7 +553,7 @@ func (cc *clientConn) readLoop() {
 		if streamID%2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
-            log.Println("streamID error.")
+            //log.Println("streamID error.")
 			continue
 		}
 		streamEnded := false
