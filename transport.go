@@ -68,6 +68,7 @@ type clientStream struct {
 	resc chan resAndError
     recvBytes uint32
 	notify chan error
+    isclosed bool
 	pw   *PipeWriter
 	pr   *PipeReader
 }
@@ -137,6 +138,13 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
+    cc.Lock()
+    for _, cs := range cc.streams {
+        close(cs.notify)
+        cs.isclosed = true
+    }
+    cc.streams = nil
+    cc.Unlock()
     t.connMu.Lock()
 	defer t.connMu.Unlock()
 	for _, key := range cc.connKey {
@@ -387,9 +395,9 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                 cs.recvBytes = 0
             }
             cc.Unlock()
-			err :=  <-cs.notify
-			if err != nil {
-				log.Println("stream closed", err)
+			err, ok :=  <-cs.notify
+			if err != nil || !ok {
+				log.Println("stream closed", ok, err)
 				break
 			}
 		}
@@ -659,12 +667,16 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 		}
 	}
     n , err = gz.zr.Read(p)
+    flag := false
     gz.cc.Lock()
     count := gz.cs.pr.GetReadCount()
     gz.cs.pr.ResetReadCount()
     gz.cs.recvBytes += uint32(count)
+    flag = !gz.cs.isclosed
     gz.cc.Unlock()
-    gz.cs.notify <- err
+    if flag {
+        gz.cs.notify <- err
+    }
     return
 }
 
