@@ -379,11 +379,6 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	//wirte dataframe
 	go func () {
 		for {
-			err :=  <-cs.notify
-			if err != nil {
-				log.Println("stream closed", err)
-				break
-			}
             cc.Lock()
             if cs.recvBytes >= (cc.initialWindowSize / 2) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
@@ -392,6 +387,11 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                 cs.recvBytes = 0
             }
             cc.Unlock()
+			err :=  <-cs.notify
+			if err != nil {
+				log.Println("stream closed", err)
+				break
+			}
 		}
 	}()
 
