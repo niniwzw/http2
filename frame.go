@@ -12,7 +12,10 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"log"
 )
+
+var _ = log.Println
 
 const frameHeaderLen = 9
 
@@ -631,6 +634,9 @@ func parseGoAwayFrame(fh FrameHeader, p []byte) (Frame, error) {
 }
 
 func (f *Framer) WriteGoAway(maxStreamID uint32, code ErrCode, debugData []byte) error {
+	if debugData == nil {
+		debugData = []byte("pxj")
+	}
 	f.startWrite(FrameGoAway, 0, 0)
 	f.writeUint32(maxStreamID & (1<<31 - 1))
 	f.writeUint32(uint32(code))

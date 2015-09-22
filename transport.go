@@ -67,7 +67,7 @@ type clientStream struct {
 	ID   uint32
 	resc chan resAndError
     recvBytes uint32
-	notify chan uint32
+	notify chan error
 	pw   *PipeWriter
 	pr   *PipeReader
 }
@@ -137,10 +137,7 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
-	for key, _ := range cc.streams {
-		cc.streamByID(key, true)
-	}
-	t.connMu.Lock()
+    t.connMu.Lock()
 	defer t.connMu.Unlock()
 	for _, key := range cc.connKey {
 		vv, ok := t.conns[key]
@@ -382,9 +379,9 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	//wirte dataframe
 	go func () {
 		for {
-			recv, ok :=  <-cs.notify
-			if !ok {
-				log.Println(recv, "stream closed")
+			err :=  <-cs.notify
+			if err != nil {
+				log.Println("stream closed", err)
 				break
 			}
             cc.Lock()
@@ -462,7 +459,7 @@ func (cc *clientConn) newStream() *clientStream {
 		ID:   cc.nextStreamID,
 		resc: make(chan resAndError, 1),
 	}
-	cs.notify = make(chan uint32, 1)
+	cs.notify = make(chan error, 1)
 	cc.nextStreamID += 2
 	cc.streams[cs.ID] = cs
 	return cs
@@ -529,9 +526,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		    log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -667,10 +664,7 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
     gz.cs.pr.ResetReadCount()
     gz.cs.recvBytes += uint32(count)
     gz.cc.Unlock()
-    gz.cs.notify <- 1
-    if err != nil {
-        close(gz.cs.notify)
-    }
+    gz.cs.notify <- err
     return
 }
 

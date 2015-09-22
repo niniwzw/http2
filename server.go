@@ -410,7 +410,9 @@ type stream struct {
 }
 
 func (sc *serverConn) Framer() *Framer  { return sc.framer }
-func (sc *serverConn) CloseConn() error { return sc.conn.Close() }
+func (sc *serverConn) CloseConn() error {
+	return sc.conn.Close() 
+}
 func (sc *serverConn) Flush() error     { return sc.bw.Flush() }
 func (sc *serverConn) HeaderEncoder() (*hpack.Encoder, *bytes.Buffer) {
 	return sc.hpackEncoder, &sc.headerWriteBuf
