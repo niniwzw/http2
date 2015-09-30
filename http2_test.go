@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
 	"github.com/niniwzw/http2/hpack"
 )
 

@@ -199,9 +199,10 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		NextProtos:         []string{NextProtoTLS},
 		InsecureSkipVerify: t.InsecureTLSDial,
 	}
-    log.Println("newClientConn->", host+":"+port)
-	tconn, err := tls.Dial("tcp", host+":"+port, cfg)
+    log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
+	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout:3*time.Second}, "tcp", host+":"+port, cfg)
 	if err != nil {
+        log.Println(err)
 		return nil, err
 	}
 	if err := tconn.Handshake(); err != nil {
@@ -323,7 +324,6 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		cc.Unlock()
 		return nil, errClientConnClosed
 	}
-
 	cs := cc.newStream()
 	hasBody := false // TODO
 
@@ -402,7 +402,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 			}
 		}
 	}()
-
+    //log.Println("wait for head read end...")
     select {
 
     case re := <-cs.resc:
@@ -534,9 +534,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 	    if f.Header().Length > 50 {
-		    log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
