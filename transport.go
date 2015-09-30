@@ -200,7 +200,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		InsecureSkipVerify: t.InsecureTLSDial,
 	}
     log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
-	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout:3*time.Second}, "tcp", host+":"+port, cfg)
+	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout: 2*time.Second}, "tcp", host+":"+port, cfg)
 	if err != nil {
         log.Println(err)
 		return nil, err
