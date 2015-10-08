@@ -134,6 +134,7 @@ func (ws *writeScheduler) take() (wm frameWriteMsg, ok bool) {
 	if len(ws.canSend) != 0 {
 		panic("should be empty")
 	}
+	//log.Println("qlen=", len(ws.sq))
 	for _, q := range ws.sq {
 		if n := ws.streamWritableBytes(q); n > 0 {
 			ws.canSend = append(ws.canSend, q)
@@ -164,7 +165,7 @@ func (ws *writeScheduler) zeroCanSend() {
 // *writeData.
 func (ws *writeScheduler) streamWritableBytes(q *writeQueue) int32 {
 	wm := q.head()
-	ret := wm.stream.flow.available() // max we can write
+	ret := wm.stream.flow.available("[streamWritableBytes]") // max we can write
 	if ret == 0 {
 		//log.Println("streamWritableBytes::id,flow,inflow", ret, wm.stream.id, wm.stream.flow.available(), wm.stream.inflow.available())
 		return 0
@@ -187,7 +188,7 @@ func (ws *writeScheduler) takeFrom(id uint32, q *writeQueue) (wm frameWriteMsg, 
 	// If the first item in this queue costs flow control tokens
 	// and we don't have enough, write as much as we can.
 	if wd, ok := wm.write.(*writeData); ok && len(wd.p) > 0 {
-		allowed := wm.stream.flow.available() // max we can write
+		allowed := wm.stream.flow.available("[takeFrom]") // max we can write
 		if allowed == 0 {
 			// No quota available. Caller can try the next stream.
 			return frameWriteMsg{}, false

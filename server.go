@@ -1177,7 +1177,7 @@ func (sc *serverConn) processData(f *DataFrame) error {
 	}
 	if len(data) > 0 {
 		// Check whether the client has flow control quota.
-		if int(st.inflow.available()) < len(data) {
+		if int(st.inflow.available("[processData]")) < len(data) {
 			return StreamError{id, ErrCodeFlowControl}
 		}
 		st.inflow.take(int32(len(data)))

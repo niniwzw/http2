@@ -101,6 +101,41 @@ func TestTransportGzip(t *testing.T) {
 	}
 }
 
+func TestTransportGzipLoop(t *testing.T) {
+	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
+        for {
+            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
+		    n, err := buf.WriteTo(w)
+            if err != nil {
+                log.Println("write:", err)
+                break
+            }
+            log.Println("write:", n, err)
+        }
+	}, optOnlyServer)
+	defer st.Close()
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
+	defer tr.CloseIdleConnections()
+    for {
+        req, err := http.NewRequest("GET", st.ts.URL, nil)
+        if err != nil {
+            t.Fatal(err)
+        }
+        res, err := tr.RoundTrip(req)
+        if err != nil {
+            t.Fatal(err)
+        }
+        data := make([]byte, 1024 * 1024)
+        n, err := res.Body.Read(data)
+        if err != nil {
+            log.Println("read:", n, err)
+            break
+        }
+        log.Println("read:", n, err)
+        res.Body.Close()
+    }
+}
+
 type tick struct {
     TimeGen  time.Time  `json:"gen"`
     TimeSend time.Time  `json:"send"`

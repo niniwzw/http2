@@ -22,6 +22,7 @@ import (
 	"compress/gzip"
 	"github.com/niniwzw/http2/hpack"
     "encoding/binary"
+    "runtime"
 )
 
 type Transport struct {
@@ -138,6 +139,7 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
+    log.Println("removeClientConn")
     cc.Lock()
     for _, cs := range cc.streams {
         close(cs.notify)
@@ -180,7 +182,9 @@ func (t *Transport) getClientConn(host, port string) (*clientConn, error) {
 	for _, cc := range t.conns[key] {
 		if cc.canTakeNewRequest() {
 			return cc, nil
-		}
+		} else {
+            log.Println("canTakeNewRequest false", cc.goAway, len(cc.streams)+1, cc.maxConcurrentStreams)
+        }
 	}
 	if t.conns == nil {
 		t.conns = make(map[string][]*clientConn)
@@ -389,11 +393,18 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		for {
 			err, ok :=  <-cs.notify
             cc.Lock()
-            if cs.recvBytes >= (cc.initialWindowSize / 2) {
+            if cs.recvBytes >= (cc.initialWindowSize / 2 - 1) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                 cc.bw.Flush()
 			    //log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
+            } else {
+                if cs.isclosed && cs.recvBytes > 0 {
+                    cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
+                    cc.bw.Flush()
+                    //log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+                    cs.recvBytes = 0
+                }
             }
             cc.Unlock()
 			if err != nil || !ok {
@@ -499,6 +510,23 @@ func (cc *clientConn) timeoutLoop() {
     }
 }
 
+func (cc *clientConn) CloseStream(stream *clientStream) error {
+    cc.Lock()
+    stream.isclosed = true
+    close(stream.notify)
+    delete(cc.streams, stream.ID)
+    stream.pw.Close()
+    cc.fr.WriteRSTStream(stream.ID, ErrCodeCancel)
+    cc.bw.Flush()
+    werr := cc.werr
+    //set stream id to zero, reset when ping is send from server
+    cc.Unlock()
+    if werr != nil {
+        log.Println(werr)
+    }
+    return werr
+}
+
 // runs in its own goroutine.
 func (cc *clientConn) readLoop() {
 	defer cc.t.removeClientConn(cc)
@@ -555,10 +583,16 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 
-		if streamID%2 == 0 {
+		if streamID % 2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
-            //log.Println("streamID error.")
+            log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+            for key := range activeRes {
+                stream := activeRes[key]
+                if stream.isclosed {
+                    delete(activeRes, key)
+                }
+            }
 			continue
 		}
 		streamEnded := false
@@ -681,6 +715,7 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 }
 
 func (gz *gzipReader) Close() error {
+    gz.cc.CloseStream(gz.cs)
 	return gz.body.Close()
 }
 
