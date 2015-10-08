@@ -100,17 +100,17 @@ func TestTransportGzip(t *testing.T) {
 		t.Fatal("data length error.")
 	}
 }
-
+/*
 func TestTransportGzipLoop(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
         for {
             buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
-		    n, err := buf.WriteTo(w)
+		    _, err := buf.WriteTo(w)
             if err != nil {
-                log.Println("write:", err)
+                //log.Println("write:", err)
                 break
             }
-            log.Println("write:", n, err)
+            //log.Println("write:", n, err)
         }
 	}, optOnlyServer)
 	defer st.Close()
@@ -126,16 +126,16 @@ func TestTransportGzipLoop(t *testing.T) {
             t.Fatal(err)
         }
         data := make([]byte, 1024 * 1024)
-        n, err := res.Body.Read(data)
+        _, err = res.Body.Read(data)
         if err != nil {
-            log.Println("read:", n, err)
+            //log.Println("read:", n, err)
             break
         }
-        log.Println("read:", n, err)
+        //log.Println("read:", n, err)
         res.Body.Close()
     }
 }
-
+*/
 type tick struct {
     TimeGen  time.Time  `json:"gen"`
     TimeSend time.Time  `json:"send"`

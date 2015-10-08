@@ -142,8 +142,10 @@ func (t *Transport) removeClientConn(cc *clientConn) {
     log.Println("removeClientConn")
     cc.Lock()
     for _, cs := range cc.streams {
-        close(cs.notify)
-        cs.isclosed = true
+        if !cs.isclosed {
+            close(cs.notify)
+            cs.isclosed = true
+        }
     }
     cc.streams = nil
     cc.Unlock()
@@ -512,6 +514,10 @@ func (cc *clientConn) timeoutLoop() {
 
 func (cc *clientConn) CloseStream(stream *clientStream) error {
     cc.Lock()
+    defer cc.Unlock()
+    if stream.isclosed {
+        return  nil
+    }
     stream.isclosed = true
     close(stream.notify)
     delete(cc.streams, stream.ID)
@@ -520,7 +526,6 @@ func (cc *clientConn) CloseStream(stream *clientStream) error {
     cc.bw.Flush()
     werr := cc.werr
     //set stream id to zero, reset when ping is send from server
-    cc.Unlock()
     if werr != nil {
         log.Println(werr)
     }
