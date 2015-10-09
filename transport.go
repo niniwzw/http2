@@ -143,8 +143,8 @@ func (t *Transport) removeClientConn(cc *clientConn) {
     cc.Lock()
     for _, cs := range cc.streams {
         if !cs.isclosed {
-            close(cs.notify)
             cs.isclosed = true
+            close(cs.notify)
         }
     }
     cc.streams = nil
@@ -512,11 +512,11 @@ func (cc *clientConn) timeoutLoop() {
     }
 }
 
-func (cc *clientConn) CloseStream(stream *clientStream) error {
+func (cc *clientConn) closeStream(stream *clientStream) error {
     cc.Lock()
     defer cc.Unlock()
     if stream.isclosed {
-        return  nil
+        return nil
     }
     stream.isclosed = true
     close(stream.notify)
@@ -592,12 +592,14 @@ func (cc *clientConn) readLoop() {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
             log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+            cc.Lock()
             for key := range activeRes {
                 stream := activeRes[key]
                 if stream.isclosed {
                     delete(activeRes, key)
                 }
             }
+            cc.Unlock()
 			continue
 		}
 		streamEnded := false
@@ -720,7 +722,7 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 }
 
 func (gz *gzipReader) Close() error {
-    gz.cc.CloseStream(gz.cs)
+    gz.cc.closeStream(gz.cs)
 	return gz.body.Close()
 }
 
