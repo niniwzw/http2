@@ -205,7 +205,7 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		NextProtos:         []string{NextProtoTLS},
 		InsecureSkipVerify: t.InsecureTLSDial,
 	}
-    log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
+    //log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
 	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout: 2*time.Second}, "tcp", host+":"+port, cfg)
 	if err != nil {
         log.Println(err)
@@ -367,7 +367,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
     //目前这个模式只适合传输少量的数据，否则连接会被独占
 	if hasBody {
 		if cc.bodybuf == nil {
-			cc.bodybuf = make([]byte, cc.maxFrameSize)
+			cc.bodybuf = make([]byte, 1 << 14)
 		}
 		for {
 			n, err := io.ReadFull(req.Body, cc.bodybuf)
@@ -410,7 +410,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
             }
             cc.Unlock()
 			if err != nil || !ok {
-				log.Println("stream closed", ok, err)
+				//log.Println("stream closed", ok, err)
                 break
 			}
 		}
@@ -591,16 +591,26 @@ func (cc *clientConn) readLoop() {
 		if streamID % 2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
-            log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
-            cc.Lock()
-            for key := range activeRes {
-                stream := activeRes[key]
-                if stream.isclosed {
-                    delete(activeRes, key)
+            switch f := f.(type) {
+            case *PingFrame:
+                log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+                cc.Lock()
+                for key := range activeRes {
+                    stream := activeRes[key]
+                    if stream.isclosed {
+                        delete(activeRes, key)
+                    }
+                }
+                cc.Unlock()
+            case *RSTStreamFrame:
+                if f.StreamID == 0 {
+                    log.Println("protocol_error::RSTStreamFrame", f.ErrCode)
+                    cc.readerErr = errors.New("protocol_error::RSTStreamFrame")
+                    cc.t.removeClientConn(cc)
+                    return
                 }
             }
-            cc.Unlock()
-			continue
+            continue
 		}
 		streamEnded := false
 		if ff, ok := f.(streamEnder); ok {
@@ -626,6 +636,14 @@ func (cc *clientConn) readLoop() {
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
 			cs.pw.Write(f.Data())
+	    case *WindowUpdateFrame:
+        case *RSTStreamFrame:
+			cc.t.removeClientConn(cc)
+			if f.ErrCode != 0 {
+				// TODO: deal with RSTStreamFrame more. particularly the error code
+				log.Printf("transport got RSTStreamFrame  with error code = %v", f.ErrCode)
+			}
+			cc.closeStream(cs)
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
