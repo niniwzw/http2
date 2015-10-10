@@ -139,6 +139,9 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
+    t.connMu.Lock()
+	defer t.connMu.Unlock()
+    //connMuLock -> cc.Lock
     log.Println("removeClientConn")
     cc.Lock()
     for _, cs := range cc.streams {
@@ -149,8 +152,6 @@ func (t *Transport) removeClientConn(cc *clientConn) {
     }
     cc.streams = nil
     cc.Unlock()
-    t.connMu.Lock()
-	defer t.connMu.Unlock()
 	for _, key := range cc.connKey {
 		vv, ok := t.conns[key]
 		if !ok {
