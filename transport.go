@@ -22,7 +22,7 @@ import (
 	"compress/gzip"
 	"github.com/niniwzw/http2/hpack"
     "encoding/binary"
-    "runtime"
+    //"runtime"
 )
 
 type Transport struct {
@@ -594,7 +594,7 @@ func (cc *clientConn) readLoop() {
 			// These always have an even stream id.
             switch f := f.(type) {
             case *PingFrame:
-                log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+                //log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
                 cc.Lock()
                 for key := range activeRes {
                     stream := activeRes[key]
