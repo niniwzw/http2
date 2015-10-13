@@ -931,7 +931,6 @@ func (sc *serverConn) processFrameFromReader(fg frameAndGate, fgValid bool) bool
 
 	switch ev := err.(type) {
 	case StreamError:
-        //log.Println("StreamError", ev)
 		sc.resetStream(ev)
 		return true
 	case goAwayFlowError:
@@ -1071,6 +1070,12 @@ func (sc *serverConn) closeStream(st *stream, err error) {
 	if p := st.body; p != nil {
 		p.Close(err)
 	}
+    sended := sc.initialWindowSize - st.flow.n
+    sc.flow.add(sended)
+
+    sended = initialWindowSize - sc.inflow.n
+    sc.inflow.add(sended)
+
 	st.cw.Close() // signals Handler's CloseNotifier, unblocks writes, etc
 	sc.writeSched.forgetStream(st.id)
 }
