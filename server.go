@@ -931,6 +931,7 @@ func (sc *serverConn) processFrameFromReader(fg frameAndGate, fgValid bool) bool
 
 	switch ev := err.(type) {
 	case StreamError:
+        log.Println("StreamError", ev)
 		sc.resetStream(ev)
 		return true
 	case goAwayFlowError:
@@ -1029,6 +1030,7 @@ func (sc *serverConn) processWindowUpdate(f *WindowUpdateFrame) error {
 			return nil
 		}
 		if !st.flow.add(int32(f.Increment)) {
+            log.Println("processWindowUpdate")
 			return StreamError{f.StreamID, ErrCodeFlowControl}
 		}
 	default: // connection-level flow control
@@ -1177,9 +1179,11 @@ func (sc *serverConn) processData(f *DataFrame) error {
 	}
 	if len(data) > 0 {
 		// Check whether the client has flow control quota.
+        log.Println("st.inflow.available", st.inflow.available("p"))
 		if int(st.inflow.available("[processData]")) < len(data) {
 			return StreamError{id, ErrCodeFlowControl}
 		}
+        log.Println("inflow take", len(data))
 		st.inflow.take(int32(len(data)))
 		wrote, err := st.body.Write(data)
 		if err != nil {
@@ -1235,7 +1239,8 @@ func (sc *serverConn) processHeaders(f *HeadersFrame) error {
 	st.flow.conn = &sc.flow // link to conn-level counter
 	st.flow.add(sc.initialWindowSize)
 	st.inflow.conn = &sc.inflow      // link to conn-level counter
-	st.inflow.add(initialWindowSize) // TODO: update this when we send a higher initial window size in the initial settings
+    st.inflow.add(initialWindowSize)
+    // TODO: update this when we send a higher initial window size in the initial settings
 
 	sc.streams[id] = st
 	if f.HasPriority() {
@@ -1488,7 +1493,7 @@ func (sc *serverConn) noteBodyReadFromHandler(st *stream, n int) {
 
 func (sc *serverConn) noteBodyRead(st *stream, n int) {
 	sc.serveG.check()
-	sc.sendWindowUpdate(nil, n) // conn-level
+	//sc.sendWindowUpdate(nil, n) // conn-level
 	if st.state != stateHalfClosedRemote && st.state != stateClosed {
 		// Don't send this WINDOW_UPDATE if the stream is closed
 		// remotely.
@@ -1531,8 +1536,10 @@ func (sc *serverConn) sendWindowUpdate32(st *stream, n int32) {
 	})
 	var ok bool
 	if st == nil {
+        log.Println("inflow add st == nil", n)
 		ok = sc.inflow.add(n)
 	} else {
+        log.Println("inflow add st != nil", n)
 		ok = st.inflow.add(n)
 	}
 	if !ok {
@@ -1566,6 +1573,7 @@ func (b *requestBody) Read(p []byte) (n int, err error) {
 	}
 	n, err = b.pipe.Read(p)
 	if n > 0 {
+        log.Println("read n", n)
 		b.conn.noteBodyReadFromHandler(b.stream, n)
 	}
 	return

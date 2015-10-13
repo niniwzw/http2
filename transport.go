@@ -620,7 +620,7 @@ func (cc *clientConn) readLoop() {
 
 		cs := cc.streamByID(streamID, streamEnded)
 		if cs == nil {
-			log.Printf("Received frame for untracked stream ID %d", streamID)
+			log.Printf("Received frame for untracked stream ID %d %v", streamID, f.Header())
 			continue
 		}
 
