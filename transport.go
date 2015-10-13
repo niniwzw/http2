@@ -399,7 +399,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
             if cs.recvBytes >= (cc.initialWindowSize / 2 - 1) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                 cc.bw.Flush()
-			    log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+			    //log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
             }
             cc.Unlock()
@@ -408,7 +408,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                 if cs.recvBytes > 0 {
                     cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                     cc.bw.Flush()
-                    log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+                    //log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                     cs.recvBytes = 0
                 }
                 delete(cc.streams, cs.ID)
@@ -416,7 +416,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                 cc.fr.WriteRSTStream(cs.ID, ErrCodeCancel)
                 cc.bw.Flush()
                 cc.Unlock()
-				log.Println("stream closed", ok, err)
+				//log.Println("stream closed", ok, err)
                 break
 			}
 		}
@@ -525,7 +525,7 @@ func (cc *clientConn) closeStream(stream *clientStream) error {
         return nil
     }
     stream.isclosed = true
-    log.Println("close(stream.notify)")
+    //log.Println("close(stream.notify)")
     close(stream.notify)
     return nil
 }
@@ -724,11 +724,13 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 		}
 	}
     n , err = gz.zr.Read(p)
+    /*
     if n > 0 {
         fmt.Print(string(p[:n]))
     } else {
         fmt.Print("EOF\n")
     }
+    */
     flag := false
     gz.cc.Lock()
     count := gz.cs.pr.GetReadCount()
