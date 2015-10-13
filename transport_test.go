@@ -141,15 +141,12 @@ func TestTransportPost(t *testing.T) {
 
 func TestTransportGzipLoop(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-        for {
-            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 1))
+            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 7))
 		    _, err := buf.WriteTo(w)
             if err != nil {
-                //log.Println("write:", err)
-                break
+                log.Println("write:", err)
             }
             //log.Println("write:", n, err)
-        }
 	}, optOnlyServer)
 	defer st.Close()
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
@@ -163,13 +160,13 @@ func TestTransportGzipLoop(t *testing.T) {
         if err != nil {
             t.Fatal(err)
         }
-        data := make([]byte, 1024 * 1024)
-        n, err := res.Body.Read(data)
+        data, err := ioutil.ReadAll(res.Body)
         if err != nil {
-            //log.Println("read:", n, err)
+            log.Println("read:", len(data), err)
             break
         }
-        log.Println("read:", n, err)
+        fmt.Print("*")
+        //log.Println("read:", len(data), err)
         res.Body.Close()
     }
 }

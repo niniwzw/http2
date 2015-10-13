@@ -399,19 +399,24 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
             if cs.recvBytes >= (cc.initialWindowSize / 2 - 1) {
                 cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
                 cc.bw.Flush()
-			    //log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+			    log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                 cs.recvBytes = 0
-            } else {
-                if cs.isclosed && cs.recvBytes > 0 {
-                    cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
-                    cc.bw.Flush()
-                    //log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
-                    cs.recvBytes = 0
-                }
             }
             cc.Unlock()
 			if err != nil || !ok {
-				//log.Println("stream closed", ok, err)
+                cc.Lock()
+                if cs.recvBytes > 0 {
+                    cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
+                    cc.bw.Flush()
+                    log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+                    cs.recvBytes = 0
+                }
+                delete(cc.streams, cs.ID)
+                cs.pw.Close()
+                cc.fr.WriteRSTStream(cs.ID, ErrCodeCancel)
+                cc.bw.Flush()
+                cc.Unlock()
+				log.Println("stream closed", ok, err)
                 break
 			}
 		}
@@ -520,17 +525,9 @@ func (cc *clientConn) closeStream(stream *clientStream) error {
         return nil
     }
     stream.isclosed = true
+    log.Println("close(stream.notify)")
     close(stream.notify)
-    delete(cc.streams, stream.ID)
-    stream.pw.Close()
-    cc.fr.WriteRSTStream(stream.ID, ErrCodeCancel)
-    cc.bw.Flush()
-    werr := cc.werr
-    //set stream id to zero, reset when ping is send from server
-    if werr != nil {
-        log.Println(werr)
-    }
-    return werr
+    return nil
 }
 
 // runs in its own goroutine.
@@ -727,6 +724,11 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 		}
 	}
     n , err = gz.zr.Read(p)
+    if n > 0 {
+        fmt.Print(string(p[:n]))
+    } else {
+        fmt.Print("EOF\n")
+    }
     flag := false
     gz.cc.Lock()
     count := gz.cs.pr.GetReadCount()

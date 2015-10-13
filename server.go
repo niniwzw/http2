@@ -1030,7 +1030,6 @@ func (sc *serverConn) processWindowUpdate(f *WindowUpdateFrame) error {
 			return nil
 		}
 		if !st.flow.add(int32(f.Increment)) {
-            //log.Println("processWindowUpdate")
 			return StreamError{f.StreamID, ErrCodeFlowControl}
 		}
 	default: // connection-level flow control
@@ -1236,10 +1235,11 @@ func (sc *serverConn) processHeaders(f *HeadersFrame) error {
 	}
 	st.cw.Init()
 
-	st.flow.conn = &sc.flow // link to conn-level counter
 	st.flow.add(sc.initialWindowSize)
-	st.inflow.conn = &sc.inflow      // link to conn-level counter
+	st.flow.conn = &sc.flow // link to conn-level counter
+
     st.inflow.add(initialWindowSize)
+	st.inflow.conn = &sc.inflow // link to conn-level counter
     // TODO: update this when we send a higher initial window size in the initial settings
 
 	sc.streams[id] = st
