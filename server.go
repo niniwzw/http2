@@ -931,7 +931,7 @@ func (sc *serverConn) processFrameFromReader(fg frameAndGate, fgValid bool) bool
 
 	switch ev := err.(type) {
 	case StreamError:
-        log.Println("StreamError", ev)
+        //log.Println("StreamError", ev)
 		sc.resetStream(ev)
 		return true
 	case goAwayFlowError:
@@ -1030,7 +1030,7 @@ func (sc *serverConn) processWindowUpdate(f *WindowUpdateFrame) error {
 			return nil
 		}
 		if !st.flow.add(int32(f.Increment)) {
-            log.Println("processWindowUpdate")
+            //log.Println("processWindowUpdate")
 			return StreamError{f.StreamID, ErrCodeFlowControl}
 		}
 	default: // connection-level flow control
@@ -1179,11 +1179,11 @@ func (sc *serverConn) processData(f *DataFrame) error {
 	}
 	if len(data) > 0 {
 		// Check whether the client has flow control quota.
-        log.Println("st.inflow.available", st.inflow.available("p"))
+        //log.Println("st.inflow.available", st.inflow.available("p"))
 		if int(st.inflow.available("[processData]")) < len(data) {
 			return StreamError{id, ErrCodeFlowControl}
 		}
-        log.Println("inflow take", len(data))
+        //log.Println("inflow take", len(data))
 		st.inflow.take(int32(len(data)))
 		wrote, err := st.body.Write(data)
 		if err != nil {
@@ -1536,10 +1536,10 @@ func (sc *serverConn) sendWindowUpdate32(st *stream, n int32) {
 	})
 	var ok bool
 	if st == nil {
-        log.Println("inflow add st == nil", n)
+        //log.Println("inflow add st == nil", n)
 		ok = sc.inflow.add(n)
 	} else {
-        log.Println("inflow add st != nil", n)
+        //log.Println("inflow add st != nil", n)
 		ok = st.inflow.add(n)
 	}
 	if !ok {
@@ -1573,7 +1573,7 @@ func (b *requestBody) Read(p []byte) (n int, err error) {
 	}
 	n, err = b.pipe.Read(p)
 	if n > 0 {
-        log.Println("read n", n)
+        //log.Println("read n", n)
 		b.conn.noteBodyReadFromHandler(b.stream, n)
 	}
 	return

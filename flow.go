@@ -27,7 +27,7 @@ func (f *flow) setConnFlow(cf *flow) { f.conn = cf }
 func (f *flow) available(flag string) int32 {
 	n := f.n
     if f.conn != nil &&  flag != "" {
-       log.Println("conn", flag, f.conn.n)
+       //log.Println("conn", flag, f.conn.n)
     }
 	if f.conn != nil && f.conn.n < n {
 		n = f.conn.n
