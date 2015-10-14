@@ -126,6 +126,32 @@ func TestTransportGzip(t *testing.T) {
 	}
 }
 
+func TestRemote(t *testing.T) {
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
+	defer tr.CloseIdleConnections()
+    for {
+        time.Sleep(time.Second)
+        req, err := http.NewRequest("GET", "https://115.231.103.4:19927/addrs", nil)
+        if err != nil {
+           log.Println(err)
+           continue
+        }
+        res, err := tr.RoundTrip(req)
+        if err != nil {
+            log.Println(err)
+            continue
+        }
+        data, err := ioutil.ReadAll(res.Body)
+        if err != nil {
+            log.Println(err)
+            continue
+        }
+        log.Println(string(data))
+        res.Body.Close()
+    }
+
+}
+
 func TestTransportPost(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
         data := make([]byte, 16384)
