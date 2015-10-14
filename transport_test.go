@@ -72,6 +72,31 @@ func makeGzipHandler(fn http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func TestTransportPanic(t *testing.T) {
+	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
+        buf := bytes.NewBufferString(strings.Repeat("a", 1 << 1))
+		buf.WriteTo(w)
+        time.Sleep(time.Second)
+	}, optOnlyServer)
+	defer st.Close()
+	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
+	defer tr.CloseIdleConnections()
+	req, err := http.NewRequest("GET", st.ts.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+    log.Println(string(data))
+}
+
 func TestTransportGzip(t *testing.T) {
 	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
         buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
@@ -105,12 +130,11 @@ func TestTransportPost(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
         data := make([]byte, 16384)
         for {
-            n, err := io.ReadFull(r.Body, data)
+            _, err := io.ReadFull(r.Body, data)
             if err != nil {
                 log.Println("post server read body error", err)
                 break
             }
-            log.Println("body.read ", n)
         }
         w.Write([]byte("OK"))
 	}, optOnlyServer)

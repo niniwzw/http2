@@ -22,7 +22,7 @@ import (
 	"compress/gzip"
 	"github.com/niniwzw/http2/hpack"
     "encoding/binary"
-    //"runtime"
+    "runtime"
 )
 
 type Transport struct {
@@ -411,10 +411,9 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                     //log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
                     cs.recvBytes = 0
                 }
-                delete(cc.streams, cs.ID)
-                cs.pw.Close()
                 cc.fr.WriteRSTStream(cs.ID, ErrCodeCancel)
                 cc.bw.Flush()
+                delete(cc.streams, cs.ID)
                 cc.Unlock()
 				//log.Println("stream closed", ok, err)
                 break
@@ -525,7 +524,6 @@ func (cc *clientConn) closeStream(stream *clientStream) error {
         return nil
     }
     stream.isclosed = true
-    //log.Println("close(stream.notify)")
     close(stream.notify)
     return nil
 }
@@ -591,11 +589,12 @@ func (cc *clientConn) readLoop() {
 			// These always have an even stream id.
             switch f := f.(type) {
             case *PingFrame:
-                //log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+                log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
                 cc.Lock()
                 for key := range activeRes {
                     stream := activeRes[key]
                     if stream.isclosed {
+                        stream.pw.Close()
                         delete(activeRes, key)
                     }
                 }
@@ -641,7 +640,6 @@ func (cc *clientConn) readLoop() {
 				// TODO: deal with RSTStreamFrame more. particularly the error code
 				log.Printf("transport got RSTStreamFrame  with error code = %v", f.ErrCode)
 			}
-			cc.closeStream(cs)
 		case *GoAwayFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
