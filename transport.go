@@ -395,7 +395,6 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	}
 	//wirte dataframe
 	go func () {
-        log.Println("start write update")
 		for {
 			err, ok :=  <-cs.notify
             cc.Lock()
@@ -418,7 +417,7 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
                 cc.bw.Flush()
                 delete(cc.streams, cs.ID)
                 cc.Unlock()
-				log.Println("stream closed", ok, err)
+				//log.Println("stream closed", ok, err)
                 break
 			}
 		}
@@ -505,7 +504,6 @@ func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 }
 
 func (cc *clientConn) timeoutLoop() {
-    log.Println("start timeLoop")
     for {
         time.Sleep(cc.timeout / 2)
         cc.Lock()
@@ -522,7 +520,6 @@ func (cc *clientConn) timeoutLoop() {
             break
         }
     }
-    log.Println("stop time loop")
 }
 
 func (cc *clientConn) closeStream(stream *clientStream) error {
@@ -538,7 +535,6 @@ func (cc *clientConn) closeStream(stream *clientStream) error {
 
 // runs in its own goroutine.
 func (cc *clientConn) readLoop() {
-    log.Println("start readLoop")
 	defer cc.t.removeClientConn(cc)
 	defer close(cc.readerDone)
 
