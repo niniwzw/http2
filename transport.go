@@ -568,9 +568,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 		if f.Header().Length > 50 {
-			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+			//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -617,9 +617,6 @@ func (cc *clientConn) readLoop() {
 		streamEnded := false
 		if ff, ok := f.(streamEnder); ok {
 			streamEnded = ff.StreamEnded()
-            if streamEnded {
-                fmt.Print("[STR_END]\n")
-            }
 		}
 
 		cs := cc.streamByID(streamID, streamEnded)
@@ -723,7 +720,6 @@ type gzipReader struct {
 }
 
 func (gz *gzipReader) Read(p []byte) (n int, err error) {
-    fmt.Print("[RB]")
 	if gz.zr == nil {
 		gz.zr, err = gzip.NewReader(gz.body)
 		if err != nil {
@@ -731,13 +727,6 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 		}
 	}
 	n, err = gz.zr.Read(p)
-	/*
-	   if n > 0 {
-	       fmt.Print(string(p[:n]))
-	   } else {
-	       fmt.Print("EOF\n")
-	   }
-	*/
 	flag := false
 	gz.cc.Lock()
 	count := gz.cs.pr.GetReadCount()
@@ -748,15 +737,12 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 	if flag {
 		gz.cs.notify <- err
 	}
-    fmt.Print("[RE]\n")
 	return
 }
 
 func (gz *gzipReader) Close() error {
-    fmt.Print("[CB]")
 	gz.cc.closeStream(gz.cs)
     err := gz.body.Close()
-    fmt.Print("[CE]\n")
     return err
 }
 

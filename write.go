@@ -86,7 +86,6 @@ func (w *writeData) String() string {
 }
 
 func (w *writeData) writeFrame(ctx writeContext) error {
-	fmt.Println(w)
 	return ctx.Framer().WriteData(w.streamID, w.endStream, w.p)
 }
 

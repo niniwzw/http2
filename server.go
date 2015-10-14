@@ -560,7 +560,6 @@ func (sc *serverConn) readFrames() {
 // serverConn.
 func (sc *serverConn) writeFrameAsync(wm frameWriteMsg) {
 	err := wm.write.writeFrame(sc)
-    fmt.Print("[", wm.stream.id, err, "]")
 	if ch := wm.done; ch != nil {
 		select {
 		case ch <- err:
@@ -716,7 +715,6 @@ func (sc *serverConn) writeDataFromHandler(stream *stream, writeData *writeData,
 	})
 	select {
 	case err := <-ch:
-        fmt.Print("[", stream.id, "]", err)
 		return err
 	case <-sc.doneServing:
 		return errClientDisconnected
@@ -1638,12 +1636,10 @@ func (cw chunkWriter) Write(p []byte) (n int, err error) { return cw.rws.writeCh
 // writeChunk is also responsible (on the first chunk) for sending the
 // HEADER response.
 func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
-	fmt.Print("[WB]")
 	if !rws.wroteHeader {
 		rws.writeHeader(200)
 	}
 	if !rws.sentHeader {
-		fmt.Print("[WB1]")
 		rws.sentHeader = true
 		var ctype, clen string // implicit ones, if we can calculate it
 		if rws.handlerDone && rws.snapHeader.Get("Content-Length") == "" {
@@ -1661,12 +1657,10 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 			contentType:   ctype,
 			contentLength: clen,
 		}, rws.frameWriteCh)
-		fmt.Print("[WB2]", endStream)
 		if endStream {
 			return 0, nil
 		}
 	}
-	fmt.Print("[WB3]")
 	if len(p) == 0 && !rws.handlerDone {
 		return 0, nil
 	}
@@ -1674,12 +1668,10 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 	curWrite.streamID = rws.stream.id
 	curWrite.p = p
 	curWrite.endStream = rws.handlerDone
-	fmt.Print("[WB4]", curWrite.endStream, rws.stream.id)
-	if err := rws.conn.writeDataFromHandler(rws.stream, curWrite, rws.frameWriteCh); err != nil {
-	    fmt.Print("[WC", err, rws.stream.id, "]")
+    copywrite := *curWrite
+	if err := rws.conn.writeDataFromHandler(rws.stream, &copywrite, rws.frameWriteCh); err != nil {
 		return 0, err
 	}
-	fmt.Print("[WC]")
 	return len(p), nil
 }
 
@@ -1798,9 +1790,7 @@ func (w *responseWriter) handlerDone() {
 		panic("handlerDone called twice")
 	}
 	rws.handlerDone = true
-	fmt.Print("[FB]")
 	w.Flush()
-	fmt.Print("[FC]\n")
 	w.rws = nil
 	responseWriterStatePool.Put(rws)
 }
