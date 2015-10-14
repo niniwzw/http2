@@ -8,11 +8,11 @@
 package http2
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
-    "bytes"
-    "io"
 )
 
 // ErrClosedPipe is the error used for read or write operations on a closed pipe.
@@ -25,13 +25,13 @@ type pipeResult struct {
 
 // A pipe is the shared pipe structure underlying PipeReader and PipeWriter.
 type pipe struct {
-	rl    sync.Mutex // gates readers one at a time
-	wl    sync.Mutex // gates writers one at a time
-	l     sync.Mutex // protects remaining fields
-	data  *bytes.Buffer     // data remaining in pending write
-	rwait sync.Cond  // waiting reader
-	rerr  error      // if reader closed, error to give writes
-	werr  error      // if writer closed, error to give reads
+	rl    sync.Mutex    // gates readers one at a time
+	wl    sync.Mutex    // gates writers one at a time
+	l     sync.Mutex    // protects remaining fields
+	data  *bytes.Buffer // data remaining in pending write
+	rwait sync.Cond     // waiting reader
+	rerr  error         // if reader closed, error to give writes
+	werr  error         // if writer closed, error to give reads
 }
 
 func (p *pipe) read(b []byte) (n int, err error) {
@@ -53,7 +53,7 @@ func (p *pipe) read(b []byte) (n int, err error) {
 		}
 		p.rwait.Wait()
 	}
-    n, err = p.data.Read(b)
+	n, err = p.data.Read(b)
 	return
 }
 
@@ -72,9 +72,9 @@ func (p *pipe) write(b []byte) (n int, err error) {
 	p.l.Lock()
 	defer p.l.Unlock()
 	if p.rerr != nil {
-        err = p.rerr
-        return
-    }
+		err = p.rerr
+		return
+	}
 	if p.werr != nil {
 		err = ErrClosedPipe
 		return
@@ -107,7 +107,7 @@ func (p *pipe) wclose(err error) {
 // A PipeReader is the read half of a pipe.
 type PipeReader struct {
 	p *pipe
-    n int64
+	n int64
 }
 
 // Read implements the standard Read interface:
@@ -117,16 +117,16 @@ type PipeReader struct {
 // returned as err; otherwise err is EOF.
 func (r *PipeReader) Read(data []byte) (n int, err error) {
 	n, err = r.p.read(data)
-    atomic.AddInt64(&r.n, int64(n))
-    return
+	atomic.AddInt64(&r.n, int64(n))
+	return
 }
 
 func (r *PipeReader) GetReadCount() int64 {
-    return atomic.LoadInt64(&r.n)
+	return atomic.LoadInt64(&r.n)
 }
 
 func (r *PipeReader) ResetReadCount() {
-    atomic.StoreInt64(&r.n, 0)
+	atomic.StoreInt64(&r.n, 0)
 }
 
 // Close closes the reader; subsequent writes to the
@@ -184,7 +184,7 @@ func (w *PipeWriter) CloseWithError(err error) error {
 //make a 0 len and 64K cap size byte array
 func Pipe() (*PipeReader, *PipeWriter) {
 	p := new(pipe)
-    p.data = bytes.NewBuffer(make([]byte, 0, 1 << 16))
+	p.data = bytes.NewBuffer(make([]byte, 0, 1<<16))
 	p.rwait.L = &p.l
 	r := &PipeReader{p, 0}
 	w := &PipeWriter{p}
@@ -192,26 +192,26 @@ func Pipe() (*PipeReader, *PipeWriter) {
 }
 
 type pipe2 struct {
-    pr *PipeReader
-    pw *PipeWriter
-    err error
-    closed bool
+	pr     *PipeReader
+	pw     *PipeWriter
+	err    error
+	closed bool
 }
 
 func newpipe2() *pipe2 {
-    r := &pipe2{}
-    r.pr , r.pw = Pipe()
-    return r
+	r := &pipe2{}
+	r.pr, r.pw = Pipe()
+	return r
 }
 
 // Read waits until data is available and copies bytes
 // from the buffer into p.
 func (r *pipe2) Read(p []byte) (n int, err error) {
 	n, err = r.pr.Read(p)
-    if err != nil && r.err != nil {
-        err = r.err
-    }
-    return
+	if err != nil && r.err != nil {
+		err = r.err
+	}
+	return
 }
 
 // Write copies bytes from p into the buffer and wakes a reader.
@@ -221,11 +221,11 @@ func (w *pipe2) Write(p []byte) (n int, err error) {
 }
 
 func (c *pipe2) Close(err error) {
-    if c.closed {
-        return
-    }
-    c.closed = true
-    c.err = err
-    //log.Println("[pipe2.Close]", err)
-    c.pw.Close()
+	if c.closed {
+		return
+	}
+	c.closed = true
+	c.err = err
+	//log.Println("[pipe2.Close]", err)
+	c.pw.Close()
 }

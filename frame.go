@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 	"log"
+	"sync"
 )
 
 var _ = log.Println

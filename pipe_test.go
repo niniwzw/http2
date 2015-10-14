@@ -300,4 +300,3 @@ func TestWriteAfterWriterClose(t *testing.T) {
 		t.Errorf("got: %q; want: %q", writeErr, io.ErrClosedPipe)
 	}
 }
-

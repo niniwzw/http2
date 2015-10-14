@@ -12,12 +12,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/niniwzw/http2/hpack"
 	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
-	"github.com/niniwzw/http2/hpack"
 )
 
 var knownFailing = flag.Bool("known_failing", false, "Run known-failing tests.")

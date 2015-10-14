@@ -10,6 +10,7 @@ package http2
 import "log"
 
 var _ = log.Println
+
 // flow is the flow control window's size.
 type flow struct {
 	// n is the number of DATA bytes we're allowed to send.
@@ -26,9 +27,9 @@ func (f *flow) setConnFlow(cf *flow) { f.conn = cf }
 
 func (f *flow) available(flag string) int32 {
 	n := f.n
-    if f.conn != nil &&  flag != "" {
-       //log.Println("conn", flag, f.conn.n)
-    }
+	if f.conn != nil && flag != "" {
+		//log.Println("conn", flag, f.conn.n)
+	}
 	if f.conn != nil && f.conn.n < n {
 		n = f.conn.n
 	}
@@ -52,17 +53,17 @@ func (f *flow) add(n int32) bool {
 	//log.Println("add = ", n, f.available(""))
 	remain := (1<<31 - 1) - f.n
 	if n > remain {
-        panic("add false n")
+		panic("add false n")
 		return false
 	}
 	f.n += n
-    if f.conn != nil {
-	    remain = (1<<31 - 1) - f.conn.n
-	    if n > remain {
-            panic("add false f.conn.n")
-		    return false
-	    }
-        f.conn.n += n
-    }
+	if f.conn != nil {
+		remain = (1<<31 - 1) - f.conn.n
+		if n > remain {
+			panic("add false f.conn.n")
+			return false
+		}
+		f.conn.n += n
+	}
 	return true
 }

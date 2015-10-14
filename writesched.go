@@ -9,7 +9,9 @@ package http2
 
 import "fmt"
 import "log"
+
 var _ = log.Println
+
 // frameWriteMsg is a request to write a frame.
 type frameWriteMsg struct {
 	// write is the interface value that does the writing, once the

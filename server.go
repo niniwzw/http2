@@ -394,7 +394,7 @@ type requestParam struct {
 type stream struct {
 	// immutable:
 	id   uint32
-	body *pipe2       // non-nil if expecting DATA frames
+	body *pipe2      // non-nil if expecting DATA frames
 	cw   closeWaiter // closed wait stream transitions to closed state
 
 	// owned by serverConn's serve loop:
@@ -409,12 +409,12 @@ type stream struct {
 	gotReset      bool // only true once detacted from streams map
 }
 
-func (sc *serverConn) Framer() *Framer  { return sc.framer }
+func (sc *serverConn) Framer() *Framer { return sc.framer }
 func (sc *serverConn) CloseConn() error {
 	return sc.conn.Close()
 }
 
-func (sc *serverConn) Flush() error     { return sc.bw.Flush() }
+func (sc *serverConn) Flush() error { return sc.bw.Flush() }
 func (sc *serverConn) HeaderEncoder() (*hpack.Encoder, *bytes.Buffer) {
 	return sc.hpackEncoder, &sc.headerWriteBuf
 }
@@ -1070,11 +1070,11 @@ func (sc *serverConn) closeStream(st *stream, err error) {
 	if p := st.body; p != nil {
 		p.Close(err)
 	}
-    sended := sc.initialWindowSize - st.flow.n
-    sc.flow.add(sended)
+	sended := sc.initialWindowSize - st.flow.n
+	sc.flow.add(sended)
 
-    sended = initialWindowSize - sc.inflow.n
-    sc.inflow.add(sended)
+	sended = initialWindowSize - sc.inflow.n
+	sc.inflow.add(sended)
 
 	st.cw.Close() // signals Handler's CloseNotifier, unblocks writes, etc
 	sc.writeSched.forgetStream(st.id)
@@ -1183,11 +1183,11 @@ func (sc *serverConn) processData(f *DataFrame) error {
 	}
 	if len(data) > 0 {
 		// Check whether the client has flow control quota.
-        //log.Println("st.inflow.available", st.inflow.available("p"))
+		//log.Println("st.inflow.available", st.inflow.available("p"))
 		if int(st.inflow.available("[processData]")) < len(data) {
 			return StreamError{id, ErrCodeFlowControl}
 		}
-        //log.Println("inflow take", len(data))
+		//log.Println("inflow take", len(data))
 		st.inflow.take(int32(len(data)))
 		wrote, err := st.body.Write(data)
 		if err != nil {
@@ -1243,9 +1243,9 @@ func (sc *serverConn) processHeaders(f *HeadersFrame) error {
 	st.flow.add(sc.initialWindowSize)
 	st.flow.conn = &sc.flow // link to conn-level counter
 
-    st.inflow.add(initialWindowSize)
+	st.inflow.add(initialWindowSize)
 	st.inflow.conn = &sc.inflow // link to conn-level counter
-    // TODO: update this when we send a higher initial window size in the initial settings
+	// TODO: update this when we send a higher initial window size in the initial settings
 
 	sc.streams[id] = st
 	if f.HasPriority() {
@@ -1541,10 +1541,10 @@ func (sc *serverConn) sendWindowUpdate32(st *stream, n int32) {
 	})
 	var ok bool
 	if st == nil {
-        //log.Println("inflow add st == nil", n)
+		//log.Println("inflow add st == nil", n)
 		ok = sc.inflow.add(n)
 	} else {
-        //log.Println("inflow add st != nil", n)
+		//log.Println("inflow add st != nil", n)
 		ok = st.inflow.add(n)
 	}
 	if !ok {
@@ -1557,7 +1557,7 @@ type requestBody struct {
 	conn          *serverConn
 	closed        bool
 	pipe          *pipe2 // non-nil if we have a HTTP entity message body
-	needsContinue bool  // need to send a 100-continue
+	needsContinue bool   // need to send a 100-continue
 }
 
 func (b *requestBody) Close() error {
@@ -1578,7 +1578,7 @@ func (b *requestBody) Read(p []byte) (n int, err error) {
 	}
 	n, err = b.pipe.Read(p)
 	if n > 0 {
-        //log.Println("read n", n)
+		//log.Println("read n", n)
 		b.conn.noteBodyReadFromHandler(b.stream, n)
 	}
 	return

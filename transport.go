@@ -8,44 +8,44 @@ package http2
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/niniwzw/http2/hpack"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-    "time"
-	"compress/gzip"
-	"github.com/niniwzw/http2/hpack"
-    "encoding/binary"
-    "runtime"
+	"time"
 )
 
 type Transport struct {
 	Fallback http.RoundTripper
 	// TODO: remove this and make more general with a TLS dial hook, like http
-	InsecureTLSDial bool
-    Timeout time.Duration
+	InsecureTLSDial    bool
+	Timeout            time.Duration
 	DisableCompression bool
-	connMu sync.Mutex
-	conns  map[string][]*clientConn // key is host:port
+	connMu             sync.Mutex
+	conns              map[string][]*clientConn // key is host:port
 }
 
 type clientConn struct {
-	t        *Transport
-	tconn    *tls.Conn
-	tlsState *tls.ConnectionState
-	connKey  []string // key(s) this connection is cached in, in t.conns
-    timeout    time.Duration
-    rtt        time.Duration
-	readerDone chan struct{} // closed on error
-	readerErr  error         // set before readerDone is closed
-	hdec       *hpack.Decoder
-	nextRes    *http.Response
+	t            *Transport
+	tconn        *tls.Conn
+	tlsState     *tls.ConnectionState
+	connKey      []string // key(s) this connection is cached in, in t.conns
+	timeout      time.Duration
+	rtt          time.Duration
+	readerDone   chan struct{} // closed on error
+	readerErr    error         // set before readerDone is closed
+	hdec         *hpack.Decoder
+	nextRes      *http.Response
 	mu           sync.Mutex
 	closed       bool
 	goAway       *GoAwayFrame // if non-nil, the GoAwayFrame we received
@@ -56,7 +56,7 @@ type clientConn struct {
 	br           *bufio.Reader
 	fr           *Framer
 	// Settings from peer:
-	bodybuf []byte
+	bodybuf              []byte
 	maxFrameSize         uint32
 	maxConcurrentStreams uint32
 	initialWindowSize    uint32
@@ -65,13 +65,13 @@ type clientConn struct {
 }
 
 type clientStream struct {
-	ID   uint32
-	resc chan resAndError
-    recvBytes uint32
-	notify chan error
-    isclosed bool
-	pw   *PipeWriter
-	pr   *PipeReader
+	ID        uint32
+	resc      chan resAndError
+	recvBytes uint32
+	notify    chan error
+	isclosed  bool
+	pw        *PipeWriter
+	pr        *PipeReader
 }
 
 type stickyErrWriter struct {
@@ -139,19 +139,19 @@ func shouldRetryRequest(err error) bool {
 }
 
 func (t *Transport) removeClientConn(cc *clientConn) {
-    t.connMu.Lock()
+	t.connMu.Lock()
 	defer t.connMu.Unlock()
-    //connMuLock -> cc.Lock
-    log.Println("removeClientConn")
-    cc.Lock()
-    for _, cs := range cc.streams {
-        if !cs.isclosed {
-            cs.isclosed = true
-            close(cs.notify)
-        }
-    }
-    cc.streams = nil
-    cc.Unlock()
+	//connMuLock -> cc.Lock
+	log.Println("removeClientConn")
+	cc.Lock()
+	for _, cs := range cc.streams {
+		if !cs.isclosed {
+			cs.isclosed = true
+			close(cs.notify)
+		}
+	}
+	cc.streams = nil
+	cc.Unlock()
 	for _, key := range cc.connKey {
 		vv, ok := t.conns[key]
 		if !ok {
@@ -164,8 +164,8 @@ func (t *Transport) removeClientConn(cc *clientConn) {
 			delete(t.conns, key)
 		}
 	}
-    //close connnection
-    cc.closeIfIdle()
+	//close connnection
+	cc.closeIfIdle()
 }
 
 func filterOutClientConn(in []*clientConn, exclude *clientConn) []*clientConn {
@@ -188,8 +188,8 @@ func (t *Transport) getClientConn(host, port string) (*clientConn, error) {
 		if cc.canTakeNewRequest() {
 			return cc, nil
 		} else {
-            log.Println("canTakeNewRequest false", cc.goAway, len(cc.streams)+1, cc.maxConcurrentStreams)
-        }
+			log.Println("canTakeNewRequest false", cc.goAway, len(cc.streams)+1, cc.maxConcurrentStreams)
+		}
 	}
 	if t.conns == nil {
 		t.conns = make(map[string][]*clientConn)
@@ -208,10 +208,10 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		NextProtos:         []string{NextProtoTLS},
 		InsecureSkipVerify: t.InsecureTLSDial,
 	}
-    //log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
-	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout: 2*time.Second}, "tcp", host+":"+port, cfg)
+	//log.Println("newClientConn->", host+":"+port, t.InsecureTLSDial)
+	tconn, err := tls.DialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", host+":"+port, cfg)
 	if err != nil {
-        log.Println(err)
+		log.Println(err)
 		return nil, err
 	}
 	if err := tconn.Handshake(); err != nil {
@@ -240,16 +240,16 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 		tlsState:             &state,
 		readerDone:           make(chan struct{}),
 		nextStreamID:         1,
-		maxFrameSize:         1 << 14, // spec default
-		initialWindowSize:    1 << 17 - 1,    // spec default
-		maxConcurrentStreams: 1000,     // "infinite", per spec. 1000 seems good enough.
+		maxFrameSize:         1 << 14,   // spec default
+		initialWindowSize:    1<<17 - 1, // spec default
+		maxConcurrentStreams: 1000,      // "infinite", per spec. 1000 seems good enough.
 		streams:              make(map[uint32]*clientStream),
 	}
 	cc.bw = bufio.NewWriter(stickyErrWriter{tconn, &cc.werr})
 	cc.br = bufio.NewReader(tconn)
 	cc.fr = NewFramer(cc.bw, cc.br)
 	cc.henc = hpack.NewEncoder(&cc.hbuf)
-    cc.fr.WriteSettings(Setting{ID:SettingInitialWindowSize, Val:cc.initialWindowSize})
+	cc.fr.WriteSettings(Setting{ID: SettingInitialWindowSize, Val: cc.initialWindowSize})
 	// TODO: re-send more conn-level flow control tokens when server uses all these.
 	cc.fr.WriteWindowUpdate(0, 1<<20) // um, 0x7fffffff doesn't work to Google? it hangs?
 	cc.bw.Flush()
@@ -284,10 +284,10 @@ func (t *Transport) newClientConn(host, port, key string) (*clientConn, error) {
 	})
 	// TODO: figure out henc size
 	cc.hdec = hpack.NewDecoder(initialHeaderTableSize, cc.onNewHeaderField)
-    if t.Timeout > 0 {
-        cc.timeout = t.Timeout
-        go cc.timeoutLoop()
-    }
+	if t.Timeout > 0 {
+		cc.timeout = t.Timeout
+		go cc.timeoutLoop()
+	}
 	go cc.readLoop()
 	return cc, nil
 }
@@ -299,11 +299,11 @@ func (cc *clientConn) setGoAway(f *GoAwayFrame) {
 }
 
 func (cc *clientConn) Lock() {
-    cc.mu.Lock()
+	cc.mu.Lock()
 }
 
 func (cc *clientConn) Unlock() {
-    cc.mu.Unlock()
+	cc.mu.Unlock()
 }
 
 func (cc *clientConn) canTakeNewRequest() bool {
@@ -336,9 +336,9 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	cs := cc.newStream()
 	hasBody := false // TODO
 
-    if req.Body != nil {
-        hasBody = true
-    }
+	if req.Body != nil {
+		hasBody = true
+	}
 	// we send: HEADERS[+CONTINUATION] + (DATA?)
 	if !cc.t.DisableCompression &&
 		req.Header.Get("Accept-Encoding") == "" &&
@@ -367,17 +367,17 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 			cc.fr.WriteContinuation(cs.ID, endHeaders, chunk)
 		}
 	}
-    //目前这个模式只适合传输少量的数据，否则连接会被独占
+	//目前这个模式只适合传输少量的数据，否则连接会被独占
 	if hasBody {
 		if cc.bodybuf == nil {
-			cc.bodybuf = make([]byte, 1 << 14)
+			cc.bodybuf = make([]byte, 1<<14)
 		}
 		for {
 			n, err := io.ReadFull(req.Body, cc.bodybuf)
 			if n > 0 && err == nil {
 				cc.fr.WriteData(cs.ID, false, cc.bodybuf[:n])
 			}
-			if  err == io.EOF || err == io.ErrUnexpectedEOF {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				cc.fr.WriteData(cs.ID, true, cc.bodybuf[:n])
 				break
 			}
@@ -394,49 +394,49 @@ func (cc *clientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		return nil, werr
 	}
 	//wirte dataframe
-	go func () {
+	go func() {
 		for {
-			err, ok :=  <-cs.notify
-            cc.Lock()
-            if cs.recvBytes >= (cc.initialWindowSize / 2 - 1) {
-                cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
-                cc.bw.Flush()
-			    //log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
-                cs.recvBytes = 0
-            }
-            cc.Unlock()
+			err, ok := <-cs.notify
+			cc.Lock()
+			if cs.recvBytes >= (cc.initialWindowSize/2 - 1) {
+				cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
+				cc.bw.Flush()
+				//log.Println("WriteWindowUpdate::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+				cs.recvBytes = 0
+			}
+			cc.Unlock()
 			if err != nil || !ok {
-                cc.Lock()
-                if cs.recvBytes > 0 {
-                    cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
-                    cc.bw.Flush()
-                    //log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
-                    cs.recvBytes = 0
-                }
-                cc.fr.WriteRSTStream(cs.ID, ErrCodeCancel)
-                cc.bw.Flush()
-                delete(cc.streams, cs.ID)
-                cc.Unlock()
+				cc.Lock()
+				if cs.recvBytes > 0 {
+					cc.fr.WriteWindowUpdate(cs.ID, cs.recvBytes)
+					cc.bw.Flush()
+					//log.Println("WriteWindowUpdate::when::Close::", cs.ID, cc.initialWindowSize, cs.recvBytes)
+					cs.recvBytes = 0
+				}
+				cc.fr.WriteRSTStream(cs.ID, ErrCodeCancel)
+				cc.bw.Flush()
+				delete(cc.streams, cs.ID)
+				cc.Unlock()
 				//log.Println("stream closed", ok, err)
-                break
+				break
 			}
 		}
 	}()
-    //log.Println("wait for head read end...")
-    select {
+	//log.Println("wait for head read end...")
+	select {
 
-    case re := <-cs.resc:
-        if re.err != nil {
-            return nil, re.err
-        }
-        res := re.res
-        res.Request = req
-        res.TLS = cc.tlsState
-        return res, nil
-    case <-cc.readerDone:
-        err := cc.readerErr
-        return nil, err
-    }
+	case re := <-cs.resc:
+		if re.err != nil {
+			return nil, re.err
+		}
+		res := re.res
+		res.Request = req
+		res.TLS = cc.tlsState
+		return res, nil
+	case <-cc.readerDone:
+		err := cc.readerErr
+		return nil, err
+	}
 }
 
 // requires cc.mu be held.
@@ -496,7 +496,7 @@ func (cc *clientConn) newStream() *clientStream {
 func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 	cc.Lock()
 	defer cc.Unlock()
-	cs , ok := cc.streams[id]
+	cs, ok := cc.streams[id]
 	if ok && andRemove {
 		delete(cc.streams, id)
 	}
@@ -504,33 +504,33 @@ func (cc *clientConn) streamByID(id uint32, andRemove bool) *clientStream {
 }
 
 func (cc *clientConn) timeoutLoop() {
-    for {
-        time.Sleep(cc.timeout / 2)
-        cc.Lock()
-        if cc.closed {
-            break
-        }
-        pingtime := newPingTime(cc.rtt)
-        cc.fr.WritePing(false, pingtime.Bytes())
-	    cc.bw.Flush()
-        werr := cc.werr
-	    cc.Unlock()
-        if werr != nil {
-            log.Println(werr)
-            break
-        }
-    }
+	for {
+		time.Sleep(cc.timeout / 2)
+		cc.Lock()
+		if cc.closed {
+			break
+		}
+		pingtime := newPingTime(cc.rtt)
+		cc.fr.WritePing(false, pingtime.Bytes())
+		cc.bw.Flush()
+		werr := cc.werr
+		cc.Unlock()
+		if werr != nil {
+			log.Println(werr)
+			break
+		}
+	}
 }
 
 func (cc *clientConn) closeStream(stream *clientStream) error {
-    cc.Lock()
-    defer cc.Unlock()
-    if stream.isclosed {
-        return nil
-    }
-    stream.isclosed = true
-    close(stream.notify)
-    return nil
+	cc.Lock()
+	defer cc.Unlock()
+	if stream.isclosed {
+		return nil
+	}
+	stream.isclosed = true
+	close(stream.notify)
+	return nil
 }
 
 // runs in its own goroutine.
@@ -558,17 +558,17 @@ func (cc *clientConn) readLoop() {
 	var continueStreamID uint32
 
 	for {
-        if cc.timeout > 0 {
-            cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
-        }
+		if cc.timeout > 0 {
+			cc.tconn.SetReadDeadline(time.Now().Add(cc.timeout))
+		}
 		f, err := cc.fr.ReadFrame()
 		if err != nil {
 			log.Println(err)
 			cc.readerErr = err
 			return
 		}
-	    if f.Header().Length > 50 {
-		    //log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+		if f.Header().Length > 50 {
+			//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
 			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
@@ -589,30 +589,30 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 
-		if streamID % 2 == 0 {
+		if streamID%2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
-            switch f := f.(type) {
-            case *PingFrame:
-                log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
-                cc.Lock()
-                for key := range activeRes {
-                    stream := activeRes[key]
-                    if stream.isclosed {
-                        stream.pw.Close()
-                        delete(activeRes, key)
-                    }
-                }
-                cc.Unlock()
-            case *RSTStreamFrame:
-                if f.StreamID == 0 {
-                    log.Println("protocol_error::RSTStreamFrame", f.ErrCode)
-                    cc.readerErr = errors.New("protocol_error::RSTStreamFrame")
-                    cc.t.removeClientConn(cc)
-                    return
-                }
-            }
-            continue
+			switch f := f.(type) {
+			case *PingFrame:
+				log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+				cc.Lock()
+				for key := range activeRes {
+					stream := activeRes[key]
+					if stream.isclosed {
+						stream.pw.Close()
+						delete(activeRes, key)
+					}
+				}
+				cc.Unlock()
+			case *RSTStreamFrame:
+				if f.StreamID == 0 {
+					log.Println("protocol_error::RSTStreamFrame", f.ErrCode)
+					cc.readerErr = errors.New("protocol_error::RSTStreamFrame")
+					cc.t.removeClientConn(cc)
+					return
+				}
+			}
+			continue
 		}
 		streamEnded := false
 		if ff, ok := f.(streamEnder); ok {
@@ -638,8 +638,8 @@ func (cc *clientConn) readLoop() {
 			cc.hdec.Write(f.HeaderBlockFragment())
 		case *DataFrame:
 			cs.pw.Write(f.Data())
-	    case *WindowUpdateFrame:
-        case *RSTStreamFrame:
+		case *WindowUpdateFrame:
+		case *RSTStreamFrame:
 			cc.t.removeClientConn(cc)
 			if f.ErrCode != 0 {
 				// TODO: deal with RSTStreamFrame more. particularly the error code
@@ -677,9 +677,9 @@ func (cc *clientConn) readLoop() {
 			// Close and also sends the server a
 			// RST_STREAM
 			if cc.nextRes.Header.Get("Content-Encoding") == "gzip" {
-                cc.nextRes.Body = &gzipReader{body: cs.pr, cc:cc, cs:cs}
+				cc.nextRes.Body = &gzipReader{body: cs.pr, cc: cc, cs: cs}
 			} else {
-                cc.nextRes.Body = &gzipReader{body: cs.pr, zr : cs.pr, cc:cc, cs:cs}
+				cc.nextRes.Body = &gzipReader{body: cs.pr, zr: cs.pr, cc: cc, cs: cs}
 			}
 			res := cc.nextRes
 			activeRes[streamID] = cs
@@ -715,8 +715,8 @@ func (cc *clientConn) onNewHeaderField(f hpack.HeaderField) {
 type gzipReader struct {
 	body io.ReadCloser // underlying Response.Body
 	zr   io.Reader     // lazily-initialized gzip reader
-    cc *clientConn
-    cs *clientStream
+	cc   *clientConn
+	cs   *clientStream
 }
 
 func (gz *gzipReader) Read(p []byte) (n int, err error) {
@@ -726,67 +726,66 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 			return 0, err
 		}
 	}
-    n , err = gz.zr.Read(p)
-    /*
-    if n > 0 {
-        fmt.Print(string(p[:n]))
-    } else {
-        fmt.Print("EOF\n")
-    }
-    */
-    flag := false
-    gz.cc.Lock()
-    count := gz.cs.pr.GetReadCount()
-    gz.cs.pr.ResetReadCount()
-    gz.cs.recvBytes += uint32(count)
-    flag = !gz.cs.isclosed
-    gz.cc.Unlock()
-    if flag {
-        gz.cs.notify <- err
-    }
-    return
+	n, err = gz.zr.Read(p)
+	/*
+	   if n > 0 {
+	       fmt.Print(string(p[:n]))
+	   } else {
+	       fmt.Print("EOF\n")
+	   }
+	*/
+	flag := false
+	gz.cc.Lock()
+	count := gz.cs.pr.GetReadCount()
+	gz.cs.pr.ResetReadCount()
+	gz.cs.recvBytes += uint32(count)
+	flag = !gz.cs.isclosed
+	gz.cc.Unlock()
+	if flag {
+		gz.cs.notify <- err
+	}
+	return
 }
 
 func (gz *gzipReader) Close() error {
-    gz.cc.closeStream(gz.cs)
+	gz.cc.closeStream(gz.cs)
 	return gz.body.Close()
 }
-
 
 type pingTime uint64
 
 func (p pingTime) Bytes() [8]byte {
-    var data [8]byte
-    buf := bytes.NewBuffer(data[:])
-    buf.Reset()
-    err := binary.Write(buf, binary.BigEndian, p)
-    if err != nil {
-        log.Println(err)
-    }
-    return data
+	var data [8]byte
+	buf := bytes.NewBuffer(data[:])
+	buf.Reset()
+	err := binary.Write(buf, binary.BigEndian, p)
+	if err != nil {
+		log.Println(err)
+	}
+	return data
 }
 
 func newPingTime(dt time.Duration) pingTime {
-    n := time.Now().Unix()
-    msec := int64(time.Now().Nanosecond()) / int64(time.Millisecond)
-    dt = dt / time.Millisecond
-    tail := uint32(dt << 9) | uint32(msec)
-    t := pingTime(n << 32 | int64(tail))
-    return t
+	n := time.Now().Unix()
+	msec := int64(time.Now().Nanosecond()) / int64(time.Millisecond)
+	dt = dt / time.Millisecond
+	tail := uint32(dt<<9) | uint32(msec)
+	t := pingTime(n<<32 | int64(tail))
+	return t
 }
 
 func newPingTimeBytes(b []byte) pingTime {
-    var ret pingTime
-    err := binary.Read(bytes.NewBuffer(b), binary.BigEndian, &ret)
-    if err != nil {
-        log.Println(err)
-    }
-    return ret
+	var ret pingTime
+	err := binary.Read(bytes.NewBuffer(b), binary.BigEndian, &ret)
+	if err != nil {
+		log.Println(err)
+	}
+	return ret
 }
 
 func (p pingTime) GetTime() (time.Time, time.Duration) {
-    n := p >> 32
-    msec := p & (1<<10 - 1)
-    dt := (p >> 9) & (1<<23-1)
-    return time.Unix(int64(n), int64(msec) * int64(time.Millisecond)), time.Duration(dt) * time.Millisecond
+	n := p >> 32
+	msec := p & (1<<10 - 1)
+	dt := (p >> 9) & (1<<23 - 1)
+	return time.Unix(int64(n), int64(msec)*int64(time.Millisecond)), time.Duration(dt) * time.Millisecond
 }

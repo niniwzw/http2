@@ -6,21 +6,21 @@
 package http2
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-    "bytes"
-    "fmt"
-	"log"
-    "math/rand"
-    "encoding/json"
-    "compress/gzip"
 )
 
 var (
@@ -28,7 +28,8 @@ var (
 	transportHost = flag.String("transporthost", "http2.golang.org", "hostname to use for TestTransport")
 	insecure      = flag.Bool("insecure", false, "insecure TLS dials")
 )
-var _  = log.Println
+var _ = log.Println
+
 func TestTransportExternal(t *testing.T) {
 	if !*extNet {
 		t.Skip("skipping external network test")
@@ -74,9 +75,9 @@ func makeGzipHandler(fn http.HandlerFunc) http.HandlerFunc {
 
 func TestTransportPanic(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-        buf := bytes.NewBufferString(strings.Repeat("a", 1 << 1))
+		buf := bytes.NewBufferString(strings.Repeat("a", 1<<1))
 		buf.WriteTo(w)
-        time.Sleep(time.Second)
+		time.Sleep(time.Second)
 	}, optOnlyServer)
 	defer st.Close()
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
@@ -94,12 +95,12 @@ func TestTransportPanic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-    log.Println(string(data))
+	log.Println(string(data))
 }
 
 func TestTransportGzip(t *testing.T) {
 	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
-        buf := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
+		buf := bytes.NewBufferString(strings.Repeat("a", 1<<20))
 		buf.WriteTo(w)
 	}), optOnlyServer)
 	defer st.Close()
@@ -121,7 +122,7 @@ func TestTransportGzip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(data) != 1 << 20 {
+	if len(data) != 1<<20 {
 		t.Fatal("data length error.")
 	}
 }
@@ -129,259 +130,257 @@ func TestTransportGzip(t *testing.T) {
 func TestRemote(t *testing.T) {
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-    for {
-        time.Sleep(time.Second)
-        req, err := http.NewRequest("GET", "https://115.231.103.4:19927/addrs", nil)
-        if err != nil {
-           log.Println(err)
-           continue
-        }
-        res, err := tr.RoundTrip(req)
-        if err != nil {
-            log.Println(err)
-            continue
-        }
-        data, err := ioutil.ReadAll(res.Body)
-        if err != nil {
-            log.Println(err)
-            continue
-        }
-        log.Println(string(data))
-        res.Body.Close()
-    }
+	for {
+		time.Sleep(time.Second)
+		req, err := http.NewRequest("GET", "https://115.231.103.4:19927/addrs", nil)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		res, err := tr.RoundTrip(req)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		data, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		log.Println(string(data))
+		res.Body.Close()
+	}
 
 }
 
 func TestTransportPost(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-        data := make([]byte, 16384)
-        for {
-            _, err := io.ReadFull(r.Body, data)
-            if err != nil {
-                log.Println("post server read body error", err)
-                break
-            }
-        }
-        w.Write([]byte("OK"))
+		data := make([]byte, 16384)
+		for {
+			_, err := io.ReadFull(r.Body, data)
+			if err != nil {
+				log.Println("post server read body error", err)
+				break
+			}
+		}
+		w.Write([]byte("OK"))
 	}, optOnlyServer)
 	defer st.Close()
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-    for {
-        reader := bytes.NewBufferString(strings.Repeat("a", 1 << 20))
-        req, err := http.NewRequest("POST", st.ts.URL, reader)
-        if err != nil {
-            t.Fatal(err)
-        }
-        res, err := tr.RoundTrip(req)
-        if err != nil {
-            t.Fatal(err)
-        }
-        var data [2]byte
-        _, err = res.Body.Read(data[:])
-        if err != nil {
-            log.Println("read err:", err)
-            break
-        }
-        log.Println("read:", string(data[:]))
-        res.Body.Close()
-    }
+	for {
+		reader := bytes.NewBufferString(strings.Repeat("a", 1<<20))
+		req, err := http.NewRequest("POST", st.ts.URL, reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := tr.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var data [2]byte
+		_, err = res.Body.Read(data[:])
+		if err != nil {
+			log.Println("read err:", err)
+			break
+		}
+		log.Println("read:", string(data[:]))
+		res.Body.Close()
+	}
 }
-
 
 func TestTransportGzipLoop(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-            buf := bytes.NewBufferString(strings.Repeat("a", 1 << 7))
-		    _, err := buf.WriteTo(w)
-            if err != nil {
-                log.Println("write:", err)
-            }
-            //log.Println("write:", n, err)
+		buf := bytes.NewBufferString(strings.Repeat("a", 1<<7))
+		_, err := buf.WriteTo(w)
+		if err != nil {
+			log.Println("write:", err)
+		}
+		//log.Println("write:", n, err)
 	}, optOnlyServer)
 	defer st.Close()
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-    for {
-        req, err := http.NewRequest("GET", st.ts.URL, nil)
-        if err != nil {
-            t.Fatal(err)
-        }
-        res, err := tr.RoundTrip(req)
-        if err != nil {
-            t.Fatal(err)
-        }
-        data, err := ioutil.ReadAll(res.Body)
-        if err != nil {
-            log.Println("read:", len(data), err)
-            break
-        }
-        fmt.Print("*")
-        //log.Println("read:", len(data), err)
-        res.Body.Close()
-    }
+	for {
+		req, err := http.NewRequest("GET", st.ts.URL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := tr.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Println("read:", len(data), err)
+			break
+		}
+		fmt.Print("*")
+		//log.Println("read:", len(data), err)
+		res.Body.Close()
+	}
 }
 
 type tick struct {
-    TimeGen  time.Time  `json:"gen"`
-    TimeSend time.Time  `json:"send"`
-    TimeRecv time.Time  `json:"recv"`
-    Ask float64 `json:"ask"`
-    Bid float64 `json:"bid"`
-    Askv float64 `json:"askv"`
-    Bidv float64 `json:"bidv"`
+	TimeGen  time.Time `json:"gen"`
+	TimeSend time.Time `json:"send"`
+	TimeRecv time.Time `json:"recv"`
+	Ask      float64   `json:"ask"`
+	Bid      float64   `json:"bid"`
+	Askv     float64   `json:"askv"`
+	Bidv     float64   `json:"bidv"`
 }
 
 var r = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 func gentick() *tick {
-    ti := &tick{}
-    ti.TimeGen = time.Now()
-    ti.Ask =  r.Float64()
-    ti.Bid =  r.Float64()
-    ti.Askv = r.Float64()
-    ti.Bidv = r.Float64()
-    return ti
+	ti := &tick{}
+	ti.TimeGen = time.Now()
+	ti.Ask = r.Float64()
+	ti.Bid = r.Float64()
+	ti.Askv = r.Float64()
+	ti.Bidv = r.Float64()
+	return ti
 }
 
-
 func ticksource(ch chan *tick) chan struct{} {
-    quit := make(chan struct{})
-    go func (quit chan struct{}) {
-        for {
-            select {
-            case ch <-gentick():
-            case <-quit:
-                return
-            }
-        }
-    }(quit)
-    return quit
+	quit := make(chan struct{})
+	go func(quit chan struct{}) {
+		for {
+			select {
+			case ch <- gentick():
+			case <-quit:
+				return
+			}
+		}
+	}(quit)
+	return quit
 }
 
 func tserver(t *testing.T) (*serverTester, chan struct{}) {
-    quitserver := make(chan struct{})
+	quitserver := make(chan struct{})
 	st := newServerTester(t, makeGzipHandler(func(w http.ResponseWriter, r *http.Request) {
-        ti := make (chan *tick)
-        quit := ticksource(ti)
-        encoder := json.NewEncoder(w)
-        for {
-            t := <-ti
-            err := encoder.Encode(t)
-            if err != nil {
-                log.Println(err)
-                quit <- struct{}{}
-                break
-            }
-        }
+		ti := make(chan *tick)
+		quit := ticksource(ti)
+		encoder := json.NewEncoder(w)
+		for {
+			t := <-ti
+			err := encoder.Encode(t)
+			if err != nil {
+				log.Println(err)
+				quit <- struct{}{}
+				break
+			}
+		}
 	}), optOnlyServer)
-    return st, quitserver
+	return st, quitserver
 }
 
 func TestTransportStreamServer(t *testing.T) {
-    return
-    st, quitserver := tserver(t)
-    defer st.Close()
+	return
+	st, quitserver := tserver(t)
+	defer st.Close()
 	<-quitserver
 }
 
 func getdata(tr *Transport, url string, sleep time.Duration) {
 retry:
-    req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Println(err)
 	}
 	res, err := tr.RoundTrip(req)
 	if err != nil {
 		log.Println(err)
-        goto retry
+		goto retry
 	}
 	defer res.Body.Close()
-    i := 0
-    decoder := json.NewDecoder(res.Body)
-    var avg time.Duration
-    var high time.Duration
-    var low = 3600 * time.Second
-    for {
-        time.Sleep(sleep)
-        var ti tick
-        err := decoder.Decode(&ti)
-        if err != nil {
-            log.Println(err)
-            goto retry
-        }
-        ti.TimeRecv = time.Now()
-        dt := ti.TimeRecv.Sub(ti.TimeGen)
-        avg += dt
-        if dt > high {
-            high = dt
-        }
-        if dt < low {
-            low = dt
-        }
-        i++
-        if i % 10000 == 0 && i > 0 {
-            log.Println("read", i)
-            log.Println("avg", avg / 10000)
-            log.Println("high", high)
-            log.Println("low", low)
-            avg = time.Duration(0)
-            high = time.Duration(0)
-            low  = 3600 * time.Second
-        }
-    }
+	i := 0
+	decoder := json.NewDecoder(res.Body)
+	var avg time.Duration
+	var high time.Duration
+	var low = 3600 * time.Second
+	for {
+		time.Sleep(sleep)
+		var ti tick
+		err := decoder.Decode(&ti)
+		if err != nil {
+			log.Println(err)
+			goto retry
+		}
+		ti.TimeRecv = time.Now()
+		dt := ti.TimeRecv.Sub(ti.TimeGen)
+		avg += dt
+		if dt > high {
+			high = dt
+		}
+		if dt < low {
+			low = dt
+		}
+		i++
+		if i%10000 == 0 && i > 0 {
+			log.Println("read", i)
+			log.Println("avg", avg/10000)
+			log.Println("high", high)
+			log.Println("low", low)
+			avg = time.Duration(0)
+			high = time.Duration(0)
+			low = 3600 * time.Second
+		}
+	}
 }
 
 func tclient(t *testing.T, url string, n int) {
-	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression:false}
+	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression: false}
 	defer tr.CloseIdleConnections()
-    done := make(chan struct{}, n)
-    for i := 0; i < n; i++ {
-        go func () {
-            getdata(tr, url, 0)
-            done<-struct{}{}
-        }()
-    }
-    for i := 0; i < n; i++ {
-        <-done
-    }
+	done := make(chan struct{}, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			getdata(tr, url, 0)
+			done <- struct{}{}
+		}()
+	}
+	for i := 0; i < n; i++ {
+		<-done
+	}
 }
 
 func TestTransportReadSleep(t *testing.T) {
-    return
-    st, _ := tserver(t)
-	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression:false}
+	return
+	st, _ := tserver(t)
+	tr := &Transport{InsecureTLSDial: true, Timeout: 5 * time.Second, DisableCompression: false}
 	defer tr.CloseIdleConnections()
 
-    go getdata(tr, st.ts.URL, 10 * time.Second)
-    getdata(tr, st.ts.URL, 0 * time.Second)
+	go getdata(tr, st.ts.URL, 10*time.Second)
+	getdata(tr, st.ts.URL, 0*time.Second)
 }
 
 func TestTransportStreamClient(t *testing.T) {
-    return
-    tclient(t, "https://115.231.103.9:8000", 10)
+	return
+	tclient(t, "https://115.231.103.9:8000", 10)
 }
 
 func TestTransportServerClient(t *testing.T) {
-    return
-    st, _ := tserver(t)
-    defer st.Close()
-    tclient(t, st.ts.URL, 10)
+	return
+	st, _ := tserver(t)
+	defer st.Close()
+	tclient(t, st.ts.URL, 10)
 }
 
 func TestTransportGet(t *testing.T) {
 	st := newServerTester(t, func(w http.ResponseWriter, r *http.Request) {
-        buf := bytes.NewBufferString("")
-        log.Println("wait ready body")
-        io.Copy(buf, r.Body)
+		buf := bytes.NewBufferString("")
+		log.Println("wait ready body")
+		io.Copy(buf, r.Body)
 		buf.WriteTo(w)
-        time.Sleep(10 * time.Second)
+		time.Sleep(10 * time.Second)
 	}, optOnlyServer)
 	defer st.Close()
 
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
-    const body = "hello world"
-    reqbody := bytes.NewBufferString(body)
+	const body = "hello world"
+	reqbody := bytes.NewBufferString(body)
 	req, err := http.NewRequest("GET", st.ts.URL, reqbody)
 	if err != nil {
 		t.Fatal(err)
@@ -412,9 +411,9 @@ func TestTransportGet(t *testing.T) {
 	if res.TLS == nil {
 		t.Error("Response.TLS = nil; want non-nil")
 	}
-    log.Println("read begin")
+	log.Println("read begin")
 	slurp, err := ioutil.ReadAll(res.Body)
-    log.Println("read end")
+	log.Println("read end")
 	if err != nil {
 		t.Errorf("Body read: %v", err)
 	} else if string(slurp) != body {
@@ -503,13 +502,13 @@ func TestTransportAbortClosesPipes(t *testing.T) {
 }
 
 func TestPingTime(t *testing.T) {
-    ping1 := newPingTime(time.Millisecond * (1024-1))
-    data := ping1.Bytes()
-    ping2 := newPingTimeBytes(data[:])
-    t1, dt1 := ping1.GetTime()
-    t2, dt2 := ping2.GetTime()
-    if t1 != t2 || dt1 != dt2 {
-        t.Error("copy ping time error.")
-        return
-    }
+	ping1 := newPingTime(time.Millisecond * (1024 - 1))
+	data := ping1.Bytes()
+	ping2 := newPingTimeBytes(data[:])
+	t1, dt1 := ping1.GetTime()
+	t2, dt2 := ping2.GetTime()
+	if t1 != t2 || dt1 != dt2 {
+		t.Error("copy ping time error.")
+		return
+	}
 }
