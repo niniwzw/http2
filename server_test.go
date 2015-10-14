@@ -1116,7 +1116,6 @@ func TestServer_StateTransitions(t *testing.T) {
 		if got, want := st.streamState(1), stateHalfClosedRemote; got != want {
 			t.Errorf("in handler, state is %v; want %v", got, want)
 		}
-
 		<-leaveHandler
 	})
 	st.greet()

@@ -28,7 +28,7 @@ func (f *flow) setConnFlow(cf *flow) { f.conn = cf }
 func (f *flow) available(flag string) int32 {
 	n := f.n
 	if f.conn != nil && flag != "" {
-		//log.Println("conn", flag, f.conn.n)
+		log.Println("conn", flag, f.conn.n)
 	}
 	if f.conn != nil && f.conn.n < n {
 		n = f.conn.n
@@ -37,7 +37,7 @@ func (f *flow) available(flag string) int32 {
 }
 
 func (f *flow) take(n int32) {
-	//log.Println("take = ", n, f.available(""))
+	log.Println("take = ", n, f.available(""))
 	if n > f.available("") {
 		panic("internal error: took too much")
 	}
@@ -50,7 +50,7 @@ func (f *flow) take(n int32) {
 // add adds n bytes (positive or negative) to the flow control window.
 // It returns false if the sum would exceed 2^31-1.
 func (f *flow) add(n int32) bool {
-	//log.Println("add = ", n, f.available(""))
+	log.Println("add = ", n, f.available(""))
 	remain := (1<<31 - 1) - f.n
 	if n > remain {
 		panic("add false n")

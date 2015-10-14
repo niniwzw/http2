@@ -131,8 +131,7 @@ func TestRemote(t *testing.T) {
 	tr := &Transport{InsecureTLSDial: true, Timeout: 2 * time.Second}
 	defer tr.CloseIdleConnections()
 	for {
-		time.Sleep(time.Second)
-		req, err := http.NewRequest("GET", "https://115.231.103.4:19927/addrs", nil)
+		req, err := http.NewRequest("GET", "https://127.0.0.1:19927/addrs", nil)
 		if err != nil {
 			log.Println(err)
 			continue

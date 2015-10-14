@@ -18,7 +18,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"runtime"
+	//"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -568,9 +568,9 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 		if f.Header().Length > 50 {
-			//log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
+			log.Printf("Transport received %v, %d", f.Header(), f.Header().Length)
 		} else {
-			//log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
+			log.Printf("Transport received %v, %d, %#v", f.Header(), f.Header().Length, f)
 		}
 		streamID := f.Header().StreamID
 
@@ -589,12 +589,12 @@ func (cc *clientConn) readLoop() {
 			return
 		}
 
-		if streamID%2 == 0 {
+		if streamID % 2 == 0 {
 			// Ignore streams pushed from the server for now.
 			// These always have an even stream id.
 			switch f := f.(type) {
 			case *PingFrame:
-				log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
+				//log.Println("streamID.", streamID, "thread::", runtime.NumGoroutine())
 				cc.Lock()
 				for key := range activeRes {
 					stream := activeRes[key]
@@ -617,6 +617,9 @@ func (cc *clientConn) readLoop() {
 		streamEnded := false
 		if ff, ok := f.(streamEnder); ok {
 			streamEnded = ff.StreamEnded()
+            if streamEnded {
+                fmt.Print("[STR_END]\n")
+            }
 		}
 
 		cs := cc.streamByID(streamID, streamEnded)
@@ -720,6 +723,7 @@ type gzipReader struct {
 }
 
 func (gz *gzipReader) Read(p []byte) (n int, err error) {
+    fmt.Print("[RB]")
 	if gz.zr == nil {
 		gz.zr, err = gzip.NewReader(gz.body)
 		if err != nil {
@@ -744,12 +748,16 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 	if flag {
 		gz.cs.notify <- err
 	}
+    fmt.Print("[RE]\n")
 	return
 }
 
 func (gz *gzipReader) Close() error {
+    fmt.Print("[CB]")
 	gz.cc.closeStream(gz.cs)
-	return gz.body.Close()
+    err := gz.body.Close()
+    fmt.Print("[CE]\n")
+    return err
 }
 
 type pingTime uint64
